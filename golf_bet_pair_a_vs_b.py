@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # 載入資料
-course_df = pd.read_csv("course_db_with_par.csv")
+course_df = pd.read_csv("course_db.csv")
 players_df = pd.read_csv("players_db.csv")
 
 st.set_page_config(page_title="高爾夫對賭 - 1 vs 3 完整版", layout="wide")
