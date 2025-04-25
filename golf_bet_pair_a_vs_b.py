@@ -64,10 +64,10 @@ for i in range(18):
     st.markdown(f"### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
     col_group = st.columns(1 + len(opponents))
     with col_group[0]:
-        scores[player_a].append(st.number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"a_{i}"))
+        scores[player_a].append(st.number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"score_{player_a}_{i}"))
     for j, op in enumerate(opponents):
         with col_group[j+1]:
-            scores[op].append(st.number_input(f"{op} 桿數", 1, 15, par[i], key=f"{op}_{i}"))
+            scores[op].append(st.number_input(f"{op} 桿數", 1, 15, par[i], key=f"score_{op}_{i}"))
 
 # --- 計算勝負 ---
 st.subheader("🏆 結果分析")
