@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(page_title="高爾夫對賭 - 1 vs 4 完整版", layout="wide")
-st.title("⛳ 高爾夫對賭 - 1 vs 4 完整版")
+st.title("⛳ 高爾夫對賭 - 1 vs N 完整版")
 
 # 載入資料
 course_df = pd.read_csv("course_db.csv")
@@ -22,28 +22,33 @@ hcp = holes["hcp"].tolist()
 
 st.markdown("### 🎯 球員設定")
 player_list = ["請選擇球員"] + players_df["name"].tolist()
+player_list_with_done = player_list + ["✅ Done"]  # 含 Done 選項
 
-# 主球員
+# 主球員選擇
 player_a = st.selectbox("選擇主球員 A", player_list)
 if player_a == "請選擇球員":
     st.warning("⚠️ 請選擇主球員 A 才能繼續操作。")
     st.stop()
 
-quick_input = {}  # 儲存快速輸入結果
+# 主球員快速成績與差點
+quick_input = {}
 quick_input[player_a] = st.text_input("主球員快速成績輸入（18位數）", key="quick_a")
 handicaps = {player_a: st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")}
+
 opponents = []
 bets = {}
 
-# 對手 B1~B4
+# 對手最多4人，支援中途結束（✅ Done）
 for i in range(1, 5):
     st.markdown(f"#### 對手球員 B{i}")
     cols = st.columns([2, 1, 1])
     with cols[0]:
-        name = st.selectbox(f"球員 B{i} 名稱", player_list, key=f"b{i}_name")
+        name = st.selectbox(f"球員 B{i} 名稱", player_list_with_done, key=f"b{i}_name")
     if name == "請選擇球員":
         st.warning(f"⚠️ 請選擇對手球員 B{i}。")
         st.stop()
+    if name == "✅ Done":
+        break
     if name in [player_a] + opponents:
         st.warning(f"⚠️ {name} 已被選擇，請勿重複。")
         st.stop()
@@ -54,13 +59,13 @@ for i in range(1, 5):
     with cols[2]:
         bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
 
-# 初始化
+# 初始化資料
 all_players = [player_a] + opponents
 score_data = {p: [] for p in all_players}
 total_earnings = {p: 0 for p in all_players}
 result_tracker = {p: {"win": 0, "lose": 0, "tie": 0} for p in all_players}
 
-# 處理快速輸入轉換
+# 處理快速輸入
 quick_scores = {}
 for p in all_players:
     value = quick_input.get(p, "")
@@ -76,7 +81,7 @@ st.markdown("### 📝 輸入每洞成績與賭金")
 
 for i in range(18):
     st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
-    cols = st.columns(5)
+    cols = st.columns(1 + len(opponents))  # 主 + 對手們
 
     # 主球員輸入
     default_score = quick_scores[player_a][i] if player_a in quick_scores else par[i]
@@ -88,7 +93,7 @@ for i in range(18):
         score_op = cols[idx + 1].number_input("", 1, 15, default_score, key=f"{op}_score_{i}", label_visibility="collapsed")
         score_data[op].append(score_op)
 
-        # 差點讓桿
+        # 差點讓桿邏輯
         adj_main = score_main
         adj_op = score_op
         if handicaps[op] > handicaps[player_a] and hcp[i] <= (handicaps[op] - handicaps[player_a]):
@@ -96,7 +101,7 @@ for i in range(18):
         elif handicaps[player_a] > handicaps[op] and hcp[i] <= (handicaps[player_a] - handicaps[op]):
             adj_main -= 1
 
-        # 勝負與加倍
+        # 勝負 + 加倍 + 統計
         if adj_op < adj_main:
             emoji = "👑"
             bonus = 2 if score_op < par[i] else 1
@@ -123,7 +128,7 @@ for i in range(18):
                 unsafe_allow_html=True
             )
 
-# 總結畫面
+# 結果統計
 st.markdown("### 📊 總結結果（含勝負平統計）")
 summary_data = []
 for p in all_players:
