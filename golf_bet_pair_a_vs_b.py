@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="高爾夫對賭 - 1 vs 3 完整版", layout="wide")
-st.title("⛳ 高爾夫對賭 - 1 vs 3 完整版")
+st.set_page_config(page_title="高爾夫對賭 - 1 vs 4 完整版", layout="wide")
+st.title("⛳ 高爾夫對賭 - 1 vs 4 完整版")
 
 # 載入球場與球員資料庫
 course_df = pd.read_csv("course_db.csv")
@@ -22,40 +22,47 @@ par = holes["par"].tolist()
 hcp = holes["hcp"].tolist()
 
 st.markdown("### 🎯 球員設定")
-# 主球員 A
-player_list = players_df["name"].tolist()
+player_list = ["請選擇球員"] + players_df["name"].tolist()
+
+# 主球員選擇
 player_a = st.selectbox("選擇主球員 A", player_list)
+if player_a == "請選擇球員":
+    st.warning("⚠️ 請選擇主球員 A 才能繼續操作。")
+    st.stop()
 
-# 差點設定
-handicaps = {}
-handicaps[player_a] = st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")
-
-# 對手球員 B1~B3 與差點與賭金設定
+# 記錄差點與賭金
+handicaps = {player_a: st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")}
 opponents = []
 bets = {}
-for i in range(1, 4):
+
+# 選擇 4 位對手球員
+for i in range(1, 5):
     st.markdown(f"#### 對手球員 B{i}")
     cols = st.columns([2, 1, 1])
     with cols[0]:
         name = st.selectbox(f"球員 B{i} 名稱", player_list, key=f"b{i}_name")
-        opponents.append(name)
+    if name == "請選擇球員":
+        st.warning(f"⚠️ 請選擇對手球員 B{i}。")
+        st.stop()
+    if name in [player_a] + opponents:
+        st.warning(f"⚠️ {name} 已被選擇，請勿重複。")
+        st.stop()
+    opponents.append(name)
     with cols[1]:
-        handicaps[name] = st.number_input(f"差點：", 0, 54, 0, key=f"hcp_b{i}")
+        handicaps[name] = st.number_input("差點：", 0, 54, 0, key=f"hcp_b{i}")
     with cols[2]:
         bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
 
-# 每洞成績輸入
-score_data = {player_a: [], opponents[0]: [], opponents[1]: [], opponents[2]: []}
-total_earnings = {player_a: 0}
-for op in opponents:
-    total_earnings[op] = 0
+# 初始化計分與結算
+score_data = {player: [] for player in [player_a] + opponents}
+total_earnings = {player: 0 for player in [player_a] + opponents}
 
 st.markdown("### 📝 輸入每洞成績與賭金")
 
 for i in range(18):
     st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
-    cols = st.columns(4)
-
+    cols = st.columns(5)
+    
     # 主球員輸入
     score_main = cols[0].number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"{player_a}_score_{i}")
     score_data[player_a].append(score_main)
@@ -74,22 +81,27 @@ for i in range(18):
         elif diff < 0 and hcp[i] <= -diff:
             adj_score_main -= 1
 
-        # 勝負判斷
+        # 勝負判斷 + Birdie 加倍
         if adj_score_op < adj_score_main:
             emoji = "👑"
-            total_earnings[op] += bets[op]
-            total_earnings[player_a] -= bets[op]
+            win_bonus = 2 if score_op < par[i] else 1
+            total_earnings[op] += bets[op] * win_bonus
+            total_earnings[player_a] -= bets[op] * win_bonus
         elif adj_score_op > adj_score_main:
             emoji = "👽"
-            total_earnings[op] -= bets[op]
-            total_earnings[player_a] += bets[op]
+            win_bonus = 2 if score_main < par[i] else 1
+            total_earnings[op] -= bets[op] * win_bonus
+            total_earnings[player_a] += bets[op] * win_bonus
         else:
             emoji = "⚖️"
+            win_bonus = 1
 
-        # 顯示 emoji 到輸入框上方
+        # Birdie 顯示小鳥圖示
+        birdie_icon = " 🐦" if score_op < par[i] else ""
+
         with cols[idx + 1]:
             st.markdown(
-                f"<div style='text-align:center; margin-bottom:-10px'><strong>{op} 桿數 {emoji}</strong></div>",
+                f"<div style='text-align:center; margin-bottom:-10px'><strong>{op} 桿數 {emoji}{birdie_icon}</strong></div>",
                 unsafe_allow_html=True
             )
 
