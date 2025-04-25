@@ -45,7 +45,7 @@ for i in range(3):
     with cols[1]:
         hcp_val = st.number_input("差點：", 0, 30, 8, key=f"hcp_{i}")
     with cols[2]:
-        bet_val = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_{i}")
+        bet_val = st.number_input("每洞賭金：", 10, 1000, 100, key=f"bet_{i}")
     opponents.append(opponent)
     handicaps.append(hcp_val)
     bets.append(bet_val)
