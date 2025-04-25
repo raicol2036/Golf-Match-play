@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="高爾夫對賭 - 1 vs N 完整版", layout="wide")
+st.set_page_config(page_title="高爾夫逐洞 - 1 vs 5", layout="wide")
 st.title("⛳ 高爾夫逐洞 - 1 vs 5 完整版")
 
 # 載入資料
