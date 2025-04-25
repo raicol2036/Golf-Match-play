@@ -75,11 +75,14 @@ for i in range(18):
         # 差點讓桿邏輯
         adj_score_main = score_main
         adj_score_op = score_op
-        diff = handicaps[player_a] - handicaps[op]
-        if diff > 0 and hcp[i] <= diff:
-            adj_score_op -= 1
-        elif diff < 0 and hcp[i] <= -diff:
-            adj_score_main -= 1
+        diff = handicaps[op] - handicaps[player_a]
+if diff > 0 and hcp[i] <= diff:
+    adj_score_op -= 1  # 對手被讓桿
+
+diff_back = handicaps[player_a] - handicaps[op]
+if diff_back > 0 and hcp[i] <= diff_back:
+    adj_score_main -= 1  # 主球員被讓桿
+
 
         # 勝負判斷 + Birdie 加倍
         if adj_score_op < adj_score_main:
