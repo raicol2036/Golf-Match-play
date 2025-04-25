@@ -1,99 +1,96 @@
 import streamlit as st
 import pandas as pd
 
-# 載入資料
-course_df = pd.read_csv("course_db.csv")
-players_df = pd.read_csv("players_db.csv")
-
 st.set_page_config(page_title="高爾夫對賭 - 1 vs 3 完整版", layout="wide")
 st.title("⛳ 高爾夫對賭 - 1 vs 3 完整版")
 
-# 選擇球場
-course_list = course_df["course_name"].unique().tolist()
-selected_course = st.selectbox("選擇球場", course_list)
+# 載入球場與球員資料庫
+course_df = pd.read_csv("course_db.csv")
+players_df = pd.read_csv("players_db.csv")
 
-# 選擇區域
-area_list = course_df[course_df["course_name"] == selected_course]["area"].unique().tolist()
-col1, col2 = st.columns(2)
-with col1:
-    selected_front_area = st.selectbox("前九洞區域", area_list)
-with col2:
-    selected_back_area = st.selectbox("後九洞區域", area_list)
+# 選擇球場與區域
+course_name = st.selectbox("選擇球場", course_df["場地名稱"].unique())
+zones = course_df[course_df["場地名稱"] == course_name]["區域"].unique()
+zone_front = st.selectbox("前九洞區域", zones)
+zone_back = st.selectbox("後九洞區域", zones)
 
-# 取得球道資訊
-front = course_df[(course_df["course_name"] == selected_course) & (course_df["area"] == selected_front_area)]
-back = course_df[(course_df["course_name"] == selected_course) & (course_df["area"] == selected_back_area)]
-holes = pd.concat([front, back]).reset_index(drop=True)
-hcp = holes["hcp"].tolist()
+# 前後九洞資料
+holes_front = course_df[(course_df["場地名稱"] == course_name) & (course_df["區域"] == zone_front)].sort_values("洞號")
+holes_back = course_df[(course_df["場地名稱"] == course_name) & (course_df["區域"] == zone_back)].sort_values("洞號")
+holes = pd.concat([holes_front, holes_back]).reset_index(drop=True)
 par = holes["par"].tolist()
+hcp = holes["hcp"].tolist()
 
-# 球員設定
 st.markdown("### 🎯 球員設定")
-player_list = players_df["name"].tolist()
-player_a = st.selectbox("選擇球員 A", player_list)
-handicap_a = st.number_input(f"{player_a} 差點", 0, 54, 0)
+# 主球員 A
+player_a = st.selectbox("選擇球員 A", players_df["name"])
 
+# 對手球員 B1~B3 與差點與賭金設定
 opponents = []
-opponent_handicaps = {}
+handicaps = {}
 bets = {}
-
-for i in range(3):
-    st.markdown(f"#### 對手球員 B{i+1}")
-    cols = st.columns([4, 1, 2])
+for i in range(1, 4):
+    st.markdown(f"#### 對手球員 B{i}")
+    cols = st.columns([2, 1, 1])
     with cols[0]:
-        opponent = st.selectbox(f"球員 B{i+1} 名稱", player_list, key=f"opponent_{i}")
+        name = st.selectbox(f"球員 B{i} 名稱", players_df["name"], key=f"b{i}_name")
+        opponents.append(name)
     with cols[1]:
-        hcp_val = st.number_input("差點：", 0, 30, 8, key=f"hcp_{i}")
+        handicaps[name] = st.number_input(f"差點：", 0, 54, 0, key=f"hcp_b{i}")
     with cols[2]:
-        bet_val = st.number_input("每洞賭金：", 10, 1000, 100, key=f"bet_{i}")
-    opponents.append(opponent)
-    opponent_handicaps[opponent] = hcp_val
-    bets[opponent] = bet_val
+        bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
 
-# 記錄分數
-st.markdown("### 📝 輸入每洞桿數與比分")
-scores = {player_a: [], opponents[0]: [], opponents[1]: [], opponents[2]: []}
-adjusted_scores = {player_a: []}
-win_stats = {p: 0 for p in [player_a] + opponents}
+# 每洞成績輸入
+score_data = {player_a: [], opponents[0]: [], opponents[1]: [], opponents[2]: []}
+results_log = []
+total_earnings = {player_a: 0}
+for op in opponents:
+    total_earnings[op] = 0
 
-for hole_idx in range(18):
-    st.subheader(f"第{hole_idx + 1}洞 (Par {par[hole_idx]}, HCP {hcp[hole_idx]})")
+st.markdown("### 📝 輸入每洞成績與賭金")
+for i in range(18):
+    st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
     cols = st.columns(4)
+    hole_idx = i
 
-    # 主球員輸入
-    with cols[0]:
-        score_a = st.number_input(f"{player_a} 桿數", 1, 15, par[hole_idx], key=f"A_score_{hole_idx}")
-    scores[player_a].append(score_a)
-    adjusted_scores[player_a].append(score_a)
+    # 主球員 A 輸入
+    score_main = cols[0].number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"{player_a}_score_{i}")
+    score_data[player_a].append(score_main)
 
-    # 對手逐一比較
-    for i, op in enumerate(opponents):
-        with cols[i + 1]:
-            score_op = st.number_input(f"{op} 桿數", 1, 15, par[hole_idx], key=f"{op}_score_{hole_idx}")
+    for idx, op in enumerate(opponents):
+        adj_score_main = score_main
+        adj_score_op = cols[idx + 1].number_input(f"{op} 桿數", 1, 15, par[i], key=f"{op}_score_{i}")
+        score_data[op].append(adj_score_op)
 
-            # 差點讓桿邏輯
-            diff = opponent_handicaps[op] - handicap_a
-            adjusted_op_score = score_op - 1 if diff > 0 and hcp[hole_idx] <= diff else score_op
+        # 差點比較並調整分數（由差點低者對高者讓桿）
+        diff = handicaps[player_a] - handicaps[op]
+        if diff > 0 and hcp[i] <= diff:
+            adj_score_op -= 1
+        elif diff < 0 and hcp[i] <= -diff:
+            adj_score_main -= 1
 
-            scores[op].append(score_op)
+        # 勝負與圖示
+        if adj_score_op < adj_score_main:
+            result = "👑"
+            total_earnings[op] += bets[op]
+            total_earnings[player_a] -= bets[op]
+        elif adj_score_op > adj_score_main:
+            result = "👽"
+            total_earnings[op] -= bets[op]
+            total_earnings[player_a] += bets[op]
+        else:
+            result = "⚖️"
 
-            # 勝負比較與符號
-            if adjusted_op_score < score_a:
-                result_icon = "👑"
-                win_stats[op] += 1
-            elif adjusted_op_score > score_a:
-                result_icon = "👽"
-                win_stats[player_a] += 1
-            else:
-                result_icon = "⚖️"
-            st.markdown(f"**{score_op} {result_icon}**")
+        results_log.append(f"第{i+1}洞 {op} vs {player_a} ➜ {result}")
 
-# 統計結果
-st.markdown("---")
-st.markdown("### 📊 結果統計")
+# 顯示總結果
+st.markdown("### 📊 總結結果")
+result_df = pd.DataFrame({
+    "球員": [player_a] + opponents,
+    "總賭金結算": [total_earnings[player_a]] + [total_earnings[op] for op in opponents]
+})
+st.dataframe(result_df.set_index("球員"))
 
-summary = pd.DataFrame({
-    "勝場": [win_stats[player_a]] + [win_stats[o] for o in opponents],
-}, index=[player_a] + opponents)
-
-st.dataframe(summary)
+st.markdown("### 📘 洞別結果說明")
+for line in results_log:
+    st.write(line)
