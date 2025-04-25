@@ -9,7 +9,7 @@ course_df = pd.read_csv("course_db.csv")
 players_df = pd.read_csv("players_db.csv")
 
 # 選擇球場與區域
-course_name = st.selectbox("course_name", course_df["course_name"].unique())
+course_name = st.selectbox("選擇球場", course_df["course_name"].unique())
 zones = course_df[course_df["course_name"] == course_name]["area"].unique()
 zone_front = st.selectbox("前九洞區域", zones)
 zone_back = st.selectbox("後九洞區域", zones)
@@ -23,17 +23,21 @@ hcp = holes["hcp"].tolist()
 
 st.markdown("### 🎯 球員設定")
 # 主球員 A
-player_a = st.selectbox("選擇球員 A", players_df["name"])
+player_list = players_df["name"].tolist()
+player_a = st.selectbox("選擇主球員 A", player_list)
+
+# 差點設定
+handicaps = {}
+handicaps[player_a] = st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")
 
 # 對手球員 B1~B3 與差點與賭金設定
 opponents = []
-handicaps = {}
 bets = {}
 for i in range(1, 4):
     st.markdown(f"#### 對手球員 B{i}")
     cols = st.columns([2, 1, 1])
     with cols[0]:
-        name = st.selectbox(f"球員 B{i} 名稱", players_df["name"], key=f"b{i}_name")
+        name = st.selectbox(f"球員 B{i} 名稱", player_list, key=f"b{i}_name")
         opponents.append(name)
     with cols[1]:
         handicaps[name] = st.number_input(f"差點：", 0, 54, 0, key=f"hcp_b{i}")
@@ -58,11 +62,13 @@ for i in range(18):
     score_data[player_a].append(score_main)
 
     for idx, op in enumerate(opponents):
-        adj_score_main = score_main
-        adj_score_op = cols[idx + 1].number_input(f"{op} 桿數", 1, 15, par[i], key=f"{op}_score_{i}")
-        score_data[op].append(adj_score_op)
+        key = f"{op}_score_{i}_{idx}"  # 確保 key 唯一
+        score_op = cols[idx + 1].number_input(f"{op} 桿數", 1, 15, par[i], key=key)
+        score_data[op].append(score_op)
 
-        # 差點比較並調整分數（由差點低者對高者讓桿）
+        # 差點讓桿邏輯（由差點低的對差點高的讓桿）
+        adj_score_main = score_main
+        adj_score_op = score_op
         diff = handicaps[player_a] - handicaps[op]
         if diff > 0 and hcp[i] <= diff:
             adj_score_op -= 1
