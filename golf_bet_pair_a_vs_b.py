@@ -9,14 +9,14 @@ course_df = pd.read_csv("course_db.csv")
 players_df = pd.read_csv("players_db.csv")
 
 # 選擇球場與區域
-course_name = st.selectbox("選擇球場", course_df["場地名稱"].unique())
-zones = course_df[course_df["場地名稱"] == course_name]["區域"].unique()
+course_name = st.selectbox("course_name", course_df["course_name"].unique())
+zones = course_df[course_df["course_name"] == course_name]["area"].unique()
 zone_front = st.selectbox("前九洞區域", zones)
 zone_back = st.selectbox("後九洞區域", zones)
 
 # 前後九洞資料
-holes_front = course_df[(course_df["場地名稱"] == course_name) & (course_df["區域"] == zone_front)].sort_values("洞號")
-holes_back = course_df[(course_df["場地名稱"] == course_name) & (course_df["區域"] == zone_back)].sort_values("洞號")
+holes_front = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_front)].sort_values("hole")
+holes_back = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_back)].sort_values("hole")
 holes = pd.concat([holes_front, holes_back]).reset_index(drop=True)
 par = holes["par"].tolist()
 hcp = holes["hcp"].tolist()
