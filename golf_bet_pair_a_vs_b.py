@@ -46,7 +46,6 @@ for i in range(1, 4):
 
 # 每洞成績輸入
 score_data = {player_a: [], opponents[0]: [], opponents[1]: [], opponents[2]: []}
-results_log = []
 total_earnings = {player_a: 0}
 for op in opponents:
     total_earnings[op] = 0
@@ -87,8 +86,6 @@ for i in range(18):
         else:
             result = "⚖️"
 
-        results_log.append(f"第{i+1}洞 {op} vs {player_a} ➜ {result}")
-
 # 顯示總結果
 st.markdown("### 📊 總結結果")
 result_df = pd.DataFrame({
@@ -96,7 +93,3 @@ result_df = pd.DataFrame({
     "總賭金結算": [total_earnings[player_a]] + [total_earnings[op] for op in opponents]
 })
 st.dataframe(result_df.set_index("球員"))
-
-st.markdown("### 📘 洞別結果說明")
-for line in results_log:
-    st.write(line)
