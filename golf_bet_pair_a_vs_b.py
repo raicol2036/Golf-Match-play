@@ -51,18 +51,18 @@ for op in opponents:
     total_earnings[op] = 0
 
 st.markdown("### 📝 輸入每洞成績與賭金")
-hole_results = []  # 每洞圖示結果
 
 for i in range(18):
     st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
     cols = st.columns(4)
+
+    # 主球員輸入
     score_main = cols[0].number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"{player_a}_score_{i}")
     score_data[player_a].append(score_main)
 
-    result_row = {player_a: "⚖️"}  # 預設主球員平手
     for idx, op in enumerate(opponents):
         key = f"{op}_score_{i}_{idx}"
-        score_op = cols[idx + 1].number_input(f"{op} 桿數", 1, 15, par[i], key=key)
+        score_op = cols[idx + 1].number_input("", 1, 15, par[i], key=key, label_visibility="collapsed")
         score_data[op].append(score_op)
 
         # 差點讓桿邏輯
@@ -74,20 +74,24 @@ for i in range(18):
         elif diff < 0 and hcp[i] <= -diff:
             adj_score_main -= 1
 
-        # 勝負邏輯與賭金
+        # 勝負判斷
         if adj_score_op < adj_score_main:
-            result_row[op] = "👑"
+            emoji = "👑"
             total_earnings[op] += bets[op]
             total_earnings[player_a] -= bets[op]
         elif adj_score_op > adj_score_main:
-            result_row[op] = "👽"
+            emoji = "👽"
             total_earnings[op] -= bets[op]
             total_earnings[player_a] += bets[op]
         else:
-            result_row[op] = "⚖️"
+            emoji = "⚖️"
 
-    hole_results.append(result_row)
-    st.table(pd.DataFrame([result_row]))  # 顯示每洞勝負圖示
+        # 顯示 emoji 到輸入框上方
+        with cols[idx + 1]:
+            st.markdown(
+                f"<div style='text-align:center; margin-bottom:-10px'><strong>{op} 桿數 {emoji}</strong></div>",
+                unsafe_allow_html=True
+            )
 
 # 顯示總結果
 st.markdown("### 📊 總結結果")
