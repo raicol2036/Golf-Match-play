@@ -30,12 +30,12 @@ if player_a == "請選擇球員":
     st.warning("⚠️ 請選擇主球員 A 才能繼續操作。")
     st.stop()
 
-# 記錄差點與賭金
+# 主球員差點設定
 handicaps = {player_a: st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")}
 opponents = []
 bets = {}
 
-# 選擇 4 位對手球員
+# 選擇對手 B1~B4
 for i in range(1, 5):
     st.markdown(f"#### 對手球員 B{i}")
     cols = st.columns([2, 1, 1])
@@ -53,7 +53,7 @@ for i in range(1, 5):
     with cols[2]:
         bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
 
-# 初始化計分與結算
+# 初始化資料結構
 score_data = {player: [] for player in [player_a] + opponents}
 total_earnings = {player: 0 for player in [player_a] + opponents}
 
@@ -62,7 +62,7 @@ st.markdown("### 📝 輸入每洞成績與賭金")
 for i in range(18):
     st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
     cols = st.columns(5)
-    
+
     # 主球員輸入
     score_main = cols[0].number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"{player_a}_score_{i}")
     score_data[player_a].append(score_main)
@@ -72,19 +72,16 @@ for i in range(18):
         score_op = cols[idx + 1].number_input("", 1, 15, par[i], key=key, label_visibility="collapsed")
         score_data[op].append(score_op)
 
-        # 差點讓桿邏輯
+        # 差點讓桿邏輯（差點高者被讓桿）
         adj_score_main = score_main
         adj_score_op = score_op
-        diff = handicaps[op] - handicaps[player_a]
-if diff > 0 and hcp[i] <= diff:
-    adj_score_op -= 1  # 對手被讓桿
 
-diff_back = handicaps[player_a] - handicaps[op]
-if diff_back > 0 and hcp[i] <= diff_back:
-    adj_score_main -= 1  # 主球員被讓桿
+        if handicaps[op] > handicaps[player_a] and hcp[i] <= (handicaps[op] - handicaps[player_a]):
+            adj_score_op -= 1
+        elif handicaps[player_a] > handicaps[op] and hcp[i] <= (handicaps[player_a] - handicaps[op]):
+            adj_score_main -= 1
 
-
-        # 勝負判斷 + Birdie 加倍
+        # 勝負邏輯 + Birdie 加倍
         if adj_score_op < adj_score_main:
             emoji = "👑"
             win_bonus = 2 if score_op < par[i] else 1
@@ -97,9 +94,8 @@ if diff_back > 0 and hcp[i] <= diff_back:
             total_earnings[player_a] += bets[op] * win_bonus
         else:
             emoji = "⚖️"
-            win_bonus = 1
 
-        # Birdie 顯示小鳥圖示
+        # Birdie 小鳥圖示
         birdie_icon = " 🐦" if score_op < par[i] else ""
 
         with cols[idx + 1]:
@@ -108,7 +104,7 @@ if diff_back > 0 and hcp[i] <= diff_back:
                 unsafe_allow_html=True
             )
 
-# 顯示總結果
+# 結果統計表
 st.markdown("### 📊 總結結果")
 result_df = pd.DataFrame({
     "球員": [player_a] + opponents,
