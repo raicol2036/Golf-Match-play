@@ -1,8 +1,25 @@
 import streamlit as st
 import pandas as pd
+from streamlit.components.v1 import html
 
-st.set_page_config(page_title="高爾夫逐洞 - 1 vs 5", layout="wide")
-st.title("⛳ 高爾夫逐洞 - 1 vs 5 完整版")
+st.set_page_config(page_title="高爾夫對賭 - 1 vs N 完整版", layout="wide")
+st.title("⛳ 高爾夫對賭 - 1 vs N 完整版")
+
+# 自定義數字輸入欄位，強制 inputmode = numeric
+def numeric_input_html(label, key):
+    value = st.session_state.get(key, "")
+    html(f"""
+        <label for="{key}" style="font-weight:bold">{label}</label><br>
+        <input id="{key}" name="{key}" inputmode="numeric" pattern="[0-9]*" maxlength="18"
+               style="width:100%; font-size:1.1em; padding:0.5em;" value="{value}" />
+        <script>
+        const input = window.parent.document.getElementById('{key}');
+        input.addEventListener('input', () => {{
+            const value = input.value;
+            window.parent.postMessage({{isStreamlitMessage: true, type: 'streamlit:setComponentValue', key: '{key}', value}}, '*');
+        }});
+        </script>
+    """, height=100)
 
 # 載入資料
 course_df = pd.read_csv("course_db.csv")
@@ -30,14 +47,13 @@ if player_a == "請選擇球員":
     st.warning("⚠️ 請選擇主球員 A 才能繼續操作。")
     st.stop()
 
-quick_input = {}
-quick_input[player_a] = st.text_input("主球員快速成績輸入（18位數）", key="quick_a")
+numeric_input_html("主球員快速成績輸入（18位數）", key=f"quick_{player_a}")
 handicaps = {player_a: st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")}
 
 opponents = []
 bets = {}
 
-# 對手最多四人，可中途用 Done 結束
+# 對手最多四人，可 Done 結束
 for i in range(1, 5):
     st.markdown(f"#### 對手球員 B{i}")
     cols = st.columns([2, 1, 1])
@@ -52,7 +68,7 @@ for i in range(1, 5):
         st.warning(f"⚠️ {name} 已被選擇，請勿重複。")
         st.stop()
     opponents.append(name)
-    quick_input[name] = st.text_input(f"{name} 快速成績輸入（18位數）", key=f"quick_{name}")
+    numeric_input_html(f"{name} 快速成績輸入（18位數）", key=f"quick_{name}")
     with cols[1]:
         handicaps[name] = st.number_input("差點：", 0, 54, 0, key=f"hcp_b{i}")
     with cols[2]:
@@ -64,17 +80,17 @@ score_data = {p: [] for p in all_players}
 total_earnings = {p: 0 for p in all_players}
 result_tracker = {p: {"win": 0, "lose": 0, "tie": 0} for p in all_players}
 
-# 快速成績處理
+# 處理快速成績
 quick_scores = {}
 for p in all_players:
-    value = quick_input.get(p, "")
-    if len(value) == 18 and value.isdigit():
+    value = st.session_state.get(f"quick_{p}", "")
+    if value and len(value) == 18 and value.isdigit():
         quick_scores[p] = [int(c) for c in value]
         if not all(1 <= s <= 15 for s in quick_scores[p]):
             st.error(f"⚠️ {p} 的每洞桿數需為 1~15。")
             quick_scores[p] = []
-    elif value != "":
-        st.error(f"⚠️ {p} 請輸入 18 位數的成績串。")
+    elif value:
+        st.error(f"⚠️ {p} 快速成績輸入需為18位數字串。")
 
 st.markdown("### 📝 輸入每洞成績與賭金")
 
@@ -82,7 +98,7 @@ for i in range(18):
     st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
     cols = st.columns(1 + len(opponents))
 
-    # 主球員成績輸入（含 birdie 顯示但不含勝負）
+    # 主球員輸入（只顯示🐦）
     default_score = quick_scores[player_a][i] if player_a in quick_scores else par[i]
     score_main = cols[0].number_input("", 1, 15, default_score, key=f"{player_a}_score_{i}", label_visibility="collapsed")
     score_data[player_a].append(score_main)
@@ -133,7 +149,7 @@ for i in range(18):
                 unsafe_allow_html=True
             )
 
-# 總結畫面
+# 📊 總結
 st.markdown("### 📊 總結結果（含勝負平統計）")
 summary_data = []
 for p in all_players:
