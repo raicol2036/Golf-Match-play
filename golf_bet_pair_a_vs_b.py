@@ -104,10 +104,17 @@ for i in range(18):
                 unsafe_allow_html=True
             )
 
-# 結果統計表
-st.markdown("### 📊 總結結果")
-result_df = pd.DataFrame({
-    "球員": [player_a] + opponents,
-    "總賭金結算": [total_earnings[player_a]] + [total_earnings[op] for op in opponents]
-})
-st.dataframe(result_df.set_index("球員"))
+# 統整總結結果（賭金＋勝負平）
+summary_data = []
+for player in [player_a] + opponents:
+    summary_data.append({
+        "球員": player,
+        "總賭金結算": total_earnings[player],
+        "勝": result_tracker[player]["win"],
+        "負": result_tracker[player]["lose"],
+        "平": result_tracker[player]["tie"]
+    })
+
+st.markdown("### 📊 總結結果（含勝負平統計）")
+summary_df = pd.DataFrame(summary_data)
+st.dataframe(summary_df.set_index("球員"))
