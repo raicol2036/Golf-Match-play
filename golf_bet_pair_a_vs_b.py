@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 
@@ -58,10 +57,10 @@ result_data = []
 for i in range(18):
     st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
     cols = st.columns(4)
-    pa = cols[0].number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"{player_a}_{i}")
-    b1 = cols[1].number_input(f"{opponents[0]} 桿數", 1, 15, par[i], key=f"{opponents[0]}_{i}")
-    b2 = cols[2].number_input(f"{opponents[1]} 桿數", 1, 15, par[i], key=f"{opponents[1]}_{i}")
-    b3 = cols[3].number_input(f"{opponents[2]} 桿數", 1, 15, par[i], key=f"{opponents[2]}_{i}")
+    pa = cols[0].number_input(f"{player_a} 桿數", 1, 15, par[i], key=f"score_{player_a}_hole{i}")
+    b1 = cols[1].number_input(f"{opponents[0]} 桿數", 1, 15, par[i], key=f"score_opponent0_hole{i}")
+    b2 = cols[2].number_input(f"{opponents[1]} 桿數", 1, 15, par[i], key=f"score_opponent1_hole{i}")
+    b3 = cols[3].number_input(f"{opponents[2]} 桿數", 1, 15, par[i], key=f"score_opponent2_hole{i}")
     score_data[player_a].append(pa)
     score_data[opponents[0]].append(b1)
     score_data[opponents[1]].append(b2)
