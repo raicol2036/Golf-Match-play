@@ -54,7 +54,7 @@ for idx in range(3):
         bet_val = st.number_input("每洞賭金", 0, 1000, 100, key=f"bet_b{idx+1}")
     opponents.append(name)
     handicaps[name] = hcp_val
-    bets[name] = bet_val
+    bets[op] = bet_val
 
 # --- 成績輸入 ---
 st.subheader("📝 輸入每洞成績")
