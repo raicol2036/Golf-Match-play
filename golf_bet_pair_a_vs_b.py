@@ -1,226 +1,164 @@
-import csv
-from dataclasses import dataclass
-from typing import List, Dict
+import streamlit as st
+import pandas as pd
+from streamlit.components.v1 import html
 
-@dataclass
-class Player:
-    name: str
-    handicap: float = 0.0  # 默认差点为0
+st.set_page_config(page_title="高爾夫Match play-1 vs N", layout="wide")
+st.title("⛳ 高爾夫Match play - 1 vs N")
 
-@dataclass
-class Hole:
-    number: int
-    par: int
-    handicap_rank: int  # 球洞难度排名
+# 自定義數字輸入欄位，強制 inputmode = numeric
+def numeric_input_html(label, key):
+    value = st.session_state.get(key, "")
+    html(f"""
+        <label for="{key}" style="font-weight:bold">{label}</label><br>
+        <input id="{key}" name="{key}" inputmode="numeric" pattern="[0-9]*" maxlength="18"
+               style="width:100%; font-size:1.1em; padding:0.5em;" value="{value}" />
+        <script>
+        const input = window.parent.document.getElementById('{key}');
+        input.addEventListener('input', () => {{
+            const value = input.value;
+            window.parent.postMessage({{isStreamlitMessage: true, type: 'streamlit:setComponentValue', key: '{key}', value}}, '*');
+        }});
+        </script>
+    """, height=100)
 
-@dataclass
-class Course:
-    name: str
-    area: str
-    total_par: int
-    holes: List[Hole]
+# 載入資料
+course_df = pd.read_csv("course_db.csv")
+players_df = pd.read_csv("players_db.csv")
 
-class GolfScoreSystem:
-    def __init__(self):
-        self.players: List[Player] = []
-        self.course: Course = None
-    
-    def load_players(self, filename: str) -> None:
-        """从CSV文件加载球员数据（只有姓名）"""
-        try:
-            with open(filename, mode='r', newline='', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
-                for row in reader:
-                    try:
-                        name = row['name'].strip()
-                        if name:  # 确保姓名不为空
-                            self.players.append(Player(name))
-                    except KeyError as e:
-                        print(f"跳过无效的行: {row}. 错误: 缺少姓名字段")
-        except FileNotFoundError:
-            print(f"错误: 文件 {filename} 未找到")
-        except Exception as e:
-            print(f"加载球员数据时出错: {e}")
-    
-    def load_course(self, filename: str) -> None:
-        """从CSV文件加载球场数据"""
-        holes = []
-        try:
-            with open(filename, mode='r', newline='', encoding='utf-8') as file:
-                # 使用制表符分隔（因为您显示的字段是用制表符分隔的）
-                reader = csv.DictReader(file, delimiter='\t')
-                course_name = ""
-                area = ""
-                total_par = 0
-                
-                for row in reader:
-                    try:
-                        if not course_name:
-                            course_name = row.get('course_name', '未知球场').strip()
-                            area = row.get('area', '').strip()
-                        
-                        hole_num = int(row['hole'])
-                        par = int(row['par'])
-                        hcp = int(row['hcp'])
-                        
-                        holes.append(Hole(hole_num, par, hcp))
-                        total_par += par
-                    except (KeyError, ValueError) as e:
-                        print(f"跳过无效的行: {row}. 错误: {e}")
-                
-                self.course = Course(course_name, area, total_par, holes)
-        except FileNotFoundError:
-            print(f"错误: 文件 {filename} 未找到")
-        except Exception as e:
-            print(f"加载球场数据时出错: {e}")
-    
-    def set_player_handicaps(self, handicaps: Dict[str, float]) -> None:
-        """设置每位球员的差点"""
-        for player in self.players:
-            if player.name in handicaps:
-                player.handicap = handicaps[player.name]
-    
-    def calculate_scores(self, player_scores: Dict[str, List[int]]) -> Dict[str, Dict[str, int]]:
-        """
-        计算每个球员的比分
-        :param player_scores: 字典 {球员姓名: [每洞得分]}
-        :return: 字典 {球员姓名: {'gross_score': 总杆数, 'net_score': 净杆数, 'stableford': 史特伯福特积分}}
-        """
-        results = {}
-        
-        if not self.course:
-            print("错误: 未加载球场数据")
-            return results
-        
-        if not self.players:
-            print("警告: 没有加载任何球员")
-            return results
-        
-        for player in self.players:
-            if player.name not in player_scores:
-                print(f"警告: 没有找到球员 {player.name} 的得分数据")
-                continue
-            
-            scores = player_scores[player.name]
-            if len(scores) != len(self.course.holes):
-                print(f"警告: 球员 {player.name} 的得分数量({len(scores)})与球洞数量({len(self.course.holes)})不匹配")
-                continue
-            
-            gross_score = sum(scores)
-            net_score = gross_score
-            
-            # 计算净杆数 (总杆数 - 差点)
-            if player.handicap > 0:
-                handicap_strokes = int(round(player.handicap))
-                
-                # 分配差点杆数到最难的前N个洞
-                sorted_holes = sorted(self.course.holes, key=lambda h: h.handicap_rank)
-                net_scores_per_hole = scores.copy()
-                
-                for hole in sorted_holes[:handicap_strokes]:
-                    hole_index = hole.number - 1  # 转换为0-based索引
-                    net_scores_per_hole[hole_index] = max(1, net_scores_per_hole[hole_index] - 1)
-                
-                net_score = sum(net_scores_per_hole)
-            
-            # 计算史特伯福特积分
-            stableford_points = 0
-            for i, hole in enumerate(self.course.holes):
-                adjusted_score = scores[i]
-                
-                # 应用差点调整
-                if player.handicap > 0:
-                    hole_rank = hole.handicap_rank
-                    if hole_rank <= player.handicap:
-                        adjusted_score -= 1
-                
-                points = 0
-                diff = adjusted_score - (hole.par + 2)  # 双柏忌是标准杆+2
-                
-                if adjusted_score == 1 and hole.par >= 4:  # 信天翁(除了三杆洞)
-                    points = 8
-                elif adjusted_score <= hole.par - 3:  # 双鹰或更好
-                    points = 5
-                elif adjusted_score == hole.par - 2:  # 老鹰
-                    points = 4
-                elif adjusted_score == hole.par - 1:  # 小鸟
-                    points = 3
-                elif adjusted_score == hole.par:  # 标准杆
-                    points = 2
-                elif adjusted_score == hole.par + 1:  # 柏忌
-                    points = 1
-                # 高于柏忌+1没有积分
-                
-                stableford_points += max(0, points)
-            
-            results[player.name] = {
-                'gross_score': gross_score,
-                'net_score': net_score,
-                'stableford': stableford_points,
-                'handicap': player.handicap
-            }
-        
-        return results
-    
-    def display_results(self, results: Dict[str, Dict[str, int]]) -> None:
-        """显示比赛结果"""
-        if not results:
-            print("没有可显示的结果")
-            return
-        
-        print("\n高尔夫比赛结果")
-        print("=" * 60)
-        print(f"球场: {self.course.name} ({self.course.area})")
-        print(f"标准杆: {self.course.total_par}")
-        print("-" * 60)
-        print("{:<20} {:<10} {:<10} {:<10} {:<10}".format(
-            "球员", "总杆数", "净杆数", "差点", "积分"
-        ))
-        print("-" * 60)
-        
-        # 按净杆数排序
-        sorted_results = sorted(results.items(), key=lambda x: x[1]['net_score'])
-        
-        for player, data in sorted_results:
-            print("{:<20} {:<10} {:<10} {:<10} {:<10}".format(
-                player,
-                data['gross_score'],
-                data['net_score'],
-                data['handicap'],
-                data['stableford']
-            ))
-        
-        print("=" * 60)
+# 球場與區域
+course_name = st.selectbox("選擇球場", course_df["course_name"].unique())
+zones = course_df[course_df["course_name"] == course_name]["area"].unique()
+zone_front = st.selectbox("前九洞區域", zones)
+zone_back = st.selectbox("後九洞區域", zones)
 
+holes_front = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_front)].sort_values("hole")
+holes_back = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_back)].sort_values("hole")
+holes = pd.concat([holes_front, holes_back]).reset_index(drop=True)
+par = holes["par"].tolist()
+hcp = holes["hcp"].tolist()
 
-# 示例用法
-if __name__ == "__main__":
-    # 初始化系统
-    golf_system = GolfScoreSystem()
-    
-    # 加载数据
-    golf_system.load_players("players.csv")
-    golf_system.load_course("course_db.csv")
-    
-    # 设置球员差点 (在实际应用中可以从输入或文件获取)
-    handicaps = {
-        "张三": 12.5,
-        "李四": 18.0,
-        "王五": 8.2
-    }
-    golf_system.set_player_handicaps(handicaps)
-    
-    # 假设的球员得分数据 (在实际应用中可以从输入或文件获取)
-    # 格式: {球员姓名: [每洞得分, ...]}
-    # 注意: 得分顺序必须与球洞顺序一致
-    player_scores = {
-        "张三": [4, 5, 3, 4, 4, 5, 3, 4, 4, 5, 4, 4, 3, 5, 4, 4, 3, 5],
-        "李四": [5, 6, 4, 5, 5, 6, 4, 5, 5, 6, 5, 5, 4, 6, 5, 5, 4, 6],
-        "王五": [4, 4, 3, 4, 3, 4, 3, 4, 3, 4, 4, 3, 3, 4, 4, 3, 3, 4]
-    }
-    
-    # 计算比分
-    results = golf_system.calculate_scores(player_scores)
-    
-    # 显示结果
-    golf_system.display_results(results)
+st.markdown("### 🎯 球員設定")
+player_list = ["請選擇球員"] + players_df["name"].tolist()
+player_list_with_done = player_list + ["✅ Done"]
+
+# 主球員
+player_a = st.selectbox("選擇主球員 A", player_list)
+if player_a == "請選擇球員":
+    st.warning("⚠️ 請選擇主球員 A 才能繼續操作。")
+    st.stop()
+
+numeric_input_html("主球員快速成績輸入（18位數）", key=f"quick_{player_a}")
+handicaps = {player_a: st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")}
+
+opponents = []
+bets = {}
+
+# 對手最多四人，可 Done 結束
+for i in range(1, 5):
+    st.markdown(f"#### 對手球員 B{i}")
+    cols = st.columns([2, 1, 1])
+    with cols[0]:
+        name = st.selectbox(f"球員 B{i} 名稱", player_list_with_done, key=f"b{i}_name")
+    if name == "請選擇球員":
+        st.warning(f"⚠️ 請選擇對手球員 B{i}。")
+        st.stop()
+    if name == "✅ Done":
+        break
+    if name in [player_a] + opponents:
+        st.warning(f"⚠️ {name} 已被選擇，請勿重複。")
+        st.stop()
+    opponents.append(name)
+    numeric_input_html(f"{name} 快速成績輸入（18位數）", key=f"quick_{name}")
+    with cols[1]:
+        handicaps[name] = st.number_input("差點：", 0, 54, 0, key=f"hcp_b{i}")
+    with cols[2]:
+        bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
+
+# 初始化
+all_players = [player_a] + opponents
+score_data = {p: [] for p in all_players}
+total_earnings = {p: 0 for p in all_players}
+result_tracker = {p: {"win": 0, "lose": 0, "tie": 0} for p in all_players}
+
+# 處理快速成績
+quick_scores = {}
+for p in all_players:
+    value = st.session_state.get(f"quick_{p}", "")
+    if value and len(value) == 18 and value.isdigit():
+        quick_scores[p] = [int(c) for c in value]
+        if not all(1 <= s <= 15 for s in quick_scores[p]):
+            st.error(f"⚠️ {p} 的每洞桿數需為 1~15。")
+            quick_scores[p] = []
+    elif value:
+        st.error(f"⚠️ {p} 快速成績輸入需為18位數字串。")
+
+st.markdown("### 📝 輸入每洞成績與賭金")
+
+for i in range(18):
+    st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
+    cols = st.columns(1 + len(opponents))
+
+    # 主球員輸入（只顯示🐦）
+    default_score = quick_scores[player_a][i] if player_a in quick_scores else par[i]
+    score_main = cols[0].number_input("", 1, 15, default_score, key=f"{player_a}_score_{i}", label_visibility="collapsed")
+    score_data[player_a].append(score_main)
+    birdie_main = " 🐦" if score_main < par[i] else ""
+    with cols[0]:
+        st.markdown(
+            f"<div style='text-align:center; margin-bottom:-10px'><strong>{player_a} 桿數{birdie_main}</strong></div>",
+            unsafe_allow_html=True
+        )
+
+    for idx, op in enumerate(opponents):
+        default_score = quick_scores[op][i] if op in quick_scores else par[i]
+        score_op = cols[idx + 1].number_input("", 1, 15, default_score, key=f"{op}_score_{i}", label_visibility="collapsed")
+        score_data[op].append(score_op)
+
+        # 差點讓桿
+        adj_main = score_main
+        adj_op = score_op
+        if handicaps[op] > handicaps[player_a] and hcp[i] <= (handicaps[op] - handicaps[player_a]):
+            adj_op -= 1
+        elif handicaps[player_a] > handicaps[op] and hcp[i] <= (handicaps[player_a] - handicaps[op]):
+            adj_main -= 1
+
+        # 勝負與賭金處理
+        if adj_op < adj_main:
+            emoji = "👑"
+            bonus = 2 if score_op < par[i] else 1
+            total_earnings[op] += bets[op] * bonus
+            total_earnings[player_a] -= bets[op] * bonus
+            result_tracker[op]["win"] += 1
+            result_tracker[player_a]["lose"] += 1
+        elif adj_op > adj_main:
+            emoji = "👽"
+            bonus = 2 if score_main < par[i] else 1
+            total_earnings[op] -= bets[op] * bonus
+            total_earnings[player_a] += bets[op] * bonus
+            result_tracker[player_a]["win"] += 1
+            result_tracker[op]["lose"] += 1
+        else:
+            emoji = "⚖️"
+            result_tracker[player_a]["tie"] += 1
+            result_tracker[op]["tie"] += 1
+
+        birdie_icon = " 🐦" if score_op < par[i] else ""
+        with cols[idx + 1]:
+            st.markdown(
+                f"<div style='text-align:center; margin-bottom:-10px'><strong>{op} 桿數 {emoji}{birdie_icon}</strong></div>",
+                unsafe_allow_html=True
+            )
+
+# 📊 總結
+st.markdown("### 📊 總結結果（含勝負平統計）")
+summary_data = []
+for p in all_players:
+    summary_data.append({
+        "球員": p,
+        "總賭金結算": total_earnings[p],
+        "勝": result_tracker[p]["win"],
+        "負": result_tracker[p]["lose"],
+        "平": result_tracker[p]["tie"]
+    })
+summary_df = pd.DataFrame(summary_data)
+st.dataframe(summary_df.set_index("球員"))
