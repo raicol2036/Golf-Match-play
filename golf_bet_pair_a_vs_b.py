@@ -1,164 +1,127 @@
-import streamlit as st
+""import streamlit as st
 import pandas as pd
-from streamlit.components.v1 import html
 
-st.set_page_config(page_title="高爾夫Match play-1 vs N", layout="wide")
-st.title("⛳ 高爾夫Match play - 1 vs N")
-
-# 自定義數字輸入欄位，強制 inputmode = numeric
-def numeric_input_html(label, key):
-    value = st.session_state.get(key, "")
-    html(f"""
-        <label for="{key}" style="font-weight:bold">{label}</label><br>
-        <input id="{key}" name="{key}" inputmode="numeric" pattern="[0-9]*" maxlength="18"
-               style="width:100%; font-size:1.1em; padding:0.5em;" value="{value}" />
-        <script>
-        const input = window.parent.document.getElementById('{key}');
-        input.addEventListener('input', () => {{
-            const value = input.value;
-            window.parent.postMessage({{isStreamlitMessage: true, type: 'streamlit:setComponentValue', key: '{key}', value}}, '*');
-        }});
-        </script>
-    """, height=100)
+st.set_page_config(page_title='高爾夫Match play-1 vs N', layout='wide')
+st.title('⛳ 高爾夫Match play - 1 vs N')
 
 # 載入資料
-course_df = pd.read_csv("course_db.csv")
-players_df = pd.read_csv("players_db.csv")
+course_df = pd.read_csv('course_db.csv')
+players_df = pd.read_csv('players_db.csv')
 
 # 球場與區域
-course_name = st.selectbox("選擇球場", course_df["course_name"].unique())
-zones = course_df[course_df["course_name"] == course_name]["area"].unique()
-zone_front = st.selectbox("前九洞區域", zones)
-zone_back = st.selectbox("後九洞區域", zones)
+course_name = st.selectbox('選擇球場', course_df['course_name'].unique())
+zones = course_df[course_df['course_name'] == course_name]['area'].unique()
+zone_front = st.selectbox('前九洞區域', zones)
+zone_back = st.selectbox('後九洞區域', zones)
 
-holes_front = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_front)].sort_values("hole")
-holes_back = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_back)].sort_values("hole")
+holes_front = course_df[(course_df['course_name'] == course_name) & (course_df['area'] == zone_front)].sort_values('hole')
+holes_back = course_df[(course_df['course_name'] == course_name) & (course_df['area'] == zone_back)].sort_values('hole')
 holes = pd.concat([holes_front, holes_back]).reset_index(drop=True)
-par = holes["par"].tolist()
-hcp = holes["hcp"].tolist()
+par = holes['par'].tolist()
+hcp = holes['hcp'].tolist()
 
-st.markdown("### 🎯 球員設定")
-player_list = ["請選擇球員"] + players_df["name"].tolist()
-player_list_with_done = player_list + ["✅ Done"]
+st.markdown('### 🎯 球員設定')
+player_list = ['請選擇球員'] + players_df['name'].tolist()
+player_list_with_done = players_df['name'].tolist() + ['✅ Done']
 
 # 主球員
-player_a = st.selectbox("選擇主球員 A", player_list)
-if player_a == "請選擇球員":
-    st.warning("⚠️ 請選擇主球員 A 才能繼續操作。")
+player_a = st.selectbox('選擇主球員 A', player_list)
+if player_a == '請選擇球員':
+    st.warning('⚠️ 請選擇主球員 A 才能繼續操作。')
     st.stop()
 
-numeric_input_html("主球員快速成績輸入（18位數）", key=f"quick_{player_a}")
-handicaps = {player_a: st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")}
+handicaps = {player_a: st.number_input(f'{player_a} 差點', 0, 54, 0, key='hcp_main')}
 
 opponents = []
 bets = {}
 
 # 對手最多四人，可 Done 結束
 for i in range(1, 5):
-    st.markdown(f"#### 對手球員 B{i}")
+    st.markdown(f'#### 對手球員 B{i}')
     cols = st.columns([2, 1, 1])
     with cols[0]:
-        name = st.selectbox(f"球員 B{i} 名稱", player_list_with_done, key=f"b{i}_name")
-    if name == "請選擇球員":
-        st.warning(f"⚠️ 請選擇對手球員 B{i}。")
+        name = st.selectbox(f'球員 B{i} 名稱', player_list_with_done, key=f'b{i}_name')
+    if name == '請選擇球員':
+        st.warning(f'⚠️ 請選擇對手球員 B{i}。')
         st.stop()
-    if name == "✅ Done":
+    if name == '✅ Done':
         break
     if name in [player_a] + opponents:
-        st.warning(f"⚠️ {name} 已被選擇，請勿重複。")
+        st.warning(f'⚠️ {name} 已被選擇，請勿重複。')
         st.stop()
     opponents.append(name)
-    numeric_input_html(f"{name} 快速成績輸入（18位數）", key=f"quick_{name}")
     with cols[1]:
-        handicaps[name] = st.number_input("差點：", 0, 54, 0, key=f"hcp_b{i}")
+        handicaps[name] = st.number_input('差點：', 0, 54, 0, key=f'hcp_b{i}')
     with cols[2]:
-        bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
+        bets[name] = st.number_input('每洞賭金', 10, 1000, 100, key=f'bet_b{i}')
 
 # 初始化
 all_players = [player_a] + opponents
 score_data = {p: [] for p in all_players}
 total_earnings = {p: 0 for p in all_players}
-result_tracker = {p: {"win": 0, "lose": 0, "tie": 0} for p in all_players}
+result_tracker = {p: {'win': 0, 'lose': 0, 'tie': 0} for p in all_players}
 
-# 處理快速成績
-quick_scores = {}
+# 快速成績輸入
+st.markdown('### ⏱️ 快速成績輸入')
 for p in all_players:
-    value = st.session_state.get(f"quick_{p}", "")
-    if value and len(value) == 18 and value.isdigit():
-        quick_scores[p] = [int(c) for c in value]
-        if not all(1 <= s <= 15 for s in quick_scores[p]):
-            st.error(f"⚠️ {p} 的每洞桿數需為 1~15。")
-            quick_scores[p] = []
-    elif value:
-        st.error(f"⚠️ {p} 快速成績輸入需為18位數字串。")
+    input_value = st.text_input(f'{p} 成績（18位數）', key=f'quick_input_{p}')
+    if len(input_value) == 18 and input_value.isdigit():
+        score_data[p] = [int(x) for x in list(input_value)]
+    else:
+        st.warning(f'{p} 的成績輸入需為18位數字！')
 
-st.markdown("### 📝 輸入每洞成績與賭金")
+# 讓桿計算
+def calculate_handicap_adjustments(player, opponent, hcp_list):
+    diff = abs(handicaps[player] - handicaps[opponent])
+    adjustments = [0] * 18
+    if diff > 0:
+        for hcp_index in sorted(hcp_list)[:diff]:
+            adjustments[hcp_index - 1] = 1
+    return adjustments
 
-for i in range(18):
-    st.markdown(f"#### 第{i+1}洞 (Par {par[i]}, HCP {hcp[i]})")
-    cols = st.columns(1 + len(opponents))
-
-    # 主球員輸入（只顯示🐦）
-    default_score = quick_scores[player_a][i] if player_a in quick_scores else par[i]
-    score_main = cols[0].number_input("", 1, 15, default_score, key=f"{player_a}_score_{i}", label_visibility="collapsed")
-    score_data[player_a].append(score_main)
-    birdie_main = " 🐦" if score_main < par[i] else ""
-    with cols[0]:
-        st.markdown(
-            f"<div style='text-align:center; margin-bottom:-10px'><strong>{player_a} 桿數{birdie_main}</strong></div>",
-            unsafe_allow_html=True
-        )
-
-    for idx, op in enumerate(opponents):
-        default_score = quick_scores[op][i] if op in quick_scores else par[i]
-        score_op = cols[idx + 1].number_input("", 1, 15, default_score, key=f"{op}_score_{i}", label_visibility="collapsed")
-        score_data[op].append(score_op)
-
-        # 差點讓桿
-        adj_main = score_main
-        adj_op = score_op
-        if handicaps[op] > handicaps[player_a] and hcp[i] <= (handicaps[op] - handicaps[player_a]):
-            adj_op -= 1
-        elif handicaps[player_a] > handicaps[op] and hcp[i] <= (handicaps[player_a] - handicaps[op]):
-            adj_main -= 1
-
-        # 勝負與賭金處理
-        if adj_op < adj_main:
-            emoji = "👑"
-            bonus = 2 if score_op < par[i] else 1
-            total_earnings[op] += bets[op] * bonus
-            total_earnings[player_a] -= bets[op] * bonus
-            result_tracker[op]["win"] += 1
-            result_tracker[player_a]["lose"] += 1
-        elif adj_op > adj_main:
-            emoji = "👽"
-            bonus = 2 if score_main < par[i] else 1
-            total_earnings[op] -= bets[op] * bonus
-            total_earnings[player_a] += bets[op] * bonus
-            result_tracker[player_a]["win"] += 1
-            result_tracker[op]["lose"] += 1
-        else:
-            emoji = "⚖️"
-            result_tracker[player_a]["tie"] += 1
-            result_tracker[op]["tie"] += 1
-
-        birdie_icon = " 🐦" if score_op < par[i] else ""
-        with cols[idx + 1]:
-            st.markdown(
-                f"<div style='text-align:center; margin-bottom:-10px'><strong>{op} 桿數 {emoji}{birdie_icon}</strong></div>",
-                unsafe_allow_html=True
-            )
-
-# 📊 總結
-st.markdown("### 📊 總結結果（含勝負平統計）")
-summary_data = []
+handicap_adjustments = {}
 for p in all_players:
-    summary_data.append({
-        "球員": p,
-        "總賭金結算": total_earnings[p],
-        "勝": result_tracker[p]["win"],
-        "負": result_tracker[p]["lose"],
-        "平": result_tracker[p]["tie"]
-    })
-summary_df = pd.DataFrame(summary_data)
-st.dataframe(summary_df.set_index("球員"))
+    handicap_adjustments[p] = calculate_handicap_adjustments(player_a, p, hcp)
+
+st.markdown('### 🏌️ 成績結果')
+for hole in range(18):
+    cols = st.columns(len(all_players))
+    for idx, p in enumerate(all_players):
+        adjusted_score = score_data[p][hole] - handicap_adjustments[p][hole]
+        cols[idx].write(f'{p}: {adjusted_score}')
+
+# 逐洞勝負判定與賭金結算
+st.markdown('### 💰 賭金與勝負結算')
+for hole in range(18):
+    winner = None
+    lowest_score = float('inf')
+    for p in all_players:
+        adjusted_score = score_data[p][hole] - handicap_adjustments[p][hole]
+        if adjusted_score < lowest_score:
+            lowest_score = adjusted_score
+            winner = p
+        elif adjusted_score == lowest_score:
+            winner = None
+    
+    if winner:
+        st.write(f'第 {hole + 1} 洞贏家：**{winner}** 🎉')
+        total_earnings[winner] += sum(bets.values())
+        result_tracker[winner]['win'] += 1
+    else:
+        st.write(f'第 {hole + 1} 洞：⚖️ 平手')
+        for p in all_players:
+            result_tracker[p]['tie'] += 1
+
+# 統計總結
+st.markdown('### 📊 總結結果')
+summary_df = pd.DataFrame([
+    {
+        '球員': p,
+        '總賭金結算': total_earnings[p],
+        '勝': result_tracker[p]['win'],
+        '負': result_tracker[p]['lose'],
+        '平': result_tracker[p]['tie']
+    } for p in all_players
+])
+st.dataframe(summary_df.set_index('球員'))
+""
