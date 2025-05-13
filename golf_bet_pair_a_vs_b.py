@@ -23,7 +23,7 @@ def numeric_input_html(label, key):
 
 # 載入資料
 course_df = pd.read_csv("course_db.csv")
-players_df = pd.read_csv("players.csv")
+players_df = pd.read_csv("players_db.csv")
 
 # 球場與區域
 course_name = st.selectbox("選擇球場", course_df["course_name"].unique())
