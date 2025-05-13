@@ -23,7 +23,12 @@ def numeric_input_html(label, key):
 
 # 載入資料
 course_df = pd.read_csv("course_db.csv")
-players_df = pd.read_csv("players_db.csv")
+players_file = st.file_uploader("上傳球員資料 (players_db.csv)", type="csv")
+if players_file is not None:
+    players_df = pd.read_csv(players_file)
+else:
+    st.warning("請上傳包含欄位 'name' 的 players_db.csv 檔案。")
+    st.stop()
 
 # 球場與區域
 course_name = st.selectbox("選擇球場", course_df["course_name"].unique())
