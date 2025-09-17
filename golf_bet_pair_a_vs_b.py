@@ -31,8 +31,7 @@ st.set_page_config(page_title="球場與球員資料載入", layout="centered")
 try:
     course_df = pd.read_csv("course_db.csv")
     st.success("✅ 成功載入 course_db.csv")
-    with st.expander("🔍 預覽球場資料", expanded=False):
-        st.dataframe(course_df.head(20), use_container_width=True)
+    
 except FileNotFoundError:
     st.error("❌ 找不到 course_db.csv，請確認檔案與程式在同一資料夾。")
     st.stop()
