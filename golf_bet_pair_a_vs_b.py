@@ -105,7 +105,7 @@ for i in range(1, 5):
     opponents.append(name)
     numeric_input_html(f"{name} 快速成績輸入（18位數）", key=f"quick_{name}")
     with cols[1]:
-        handicaps[name] = st.number_input("讓桿：", 0, 54, 0, key=f"hcp_b{i}")
+        handicaps[name] = st.number_input("讓桿：", -18, 18, 0, key=f"hcp_b{i}")
     with cols[2]:
         bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
 
