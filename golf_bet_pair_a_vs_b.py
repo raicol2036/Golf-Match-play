@@ -96,9 +96,7 @@ for i in range(1, 5):
         st.stop()
     if name == "✅ Done":
         break
-    if name in [player_a] + opponents:
-        st.warning(f"⚠️ {name} 已被選擇，請勿重複。")
-        st.stop()
+   
     opponents.append(name)
     numeric_input_html(f"{name} 快速成績輸入（18位數）", key=f"quick_{name}")
     with cols[1]:
