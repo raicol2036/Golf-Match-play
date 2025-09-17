@@ -46,8 +46,6 @@ try:
         st.error("❌ players_db.csv 缺少必要欄位 'name'，請檢查檔案格式。")
         st.stop()
     st.success("✅ 成功載入 players_db.csv")
-    with st.expander("🔍 預覽球員資料", expanded=True):
-        st.dataframe(players_df.head(20), use_container_width=True)
 except FileNotFoundError:
     st.error("❌ 找不到 players_db.csv，請確認檔案與程式在同一資料夾。")
     st.stop()
