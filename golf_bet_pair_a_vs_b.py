@@ -22,13 +22,43 @@ def numeric_input_html(label, key):
     """, height=100)
 
 # 載入資料
-course_df = pd.read_csv("course_db.csv")
-players_file = st.file_uploader("上傳球員資料 (players_db.csv)", type="csv")
-if players_file is not None:
-    players_df = pd.read_csv(players_file)
-else:
-    st.warning("請上傳包含欄位 'name' 的 players_db.csv 檔案。")
+import pandas as pd
+import streamlit as st
+
+st.set_page_config(page_title="球場與球員資料載入", layout="centered")
+
+# ---------- 讀取球場資料 ----------
+try:
+    course_df = pd.read_csv("course_db.csv")
+    st.success("✅ 成功載入 course_db.csv")
+    with st.expander("🔍 預覽球場資料", expanded=False):
+        st.dataframe(course_df.head(20), use_container_width=True)
+except FileNotFoundError:
+    st.error("❌ 找不到 course_db.csv，請確認檔案與程式在同一資料夾。")
     st.stop()
+except Exception as e:
+    st.error(f"讀取 course_db.csv 發生錯誤：{e}")
+    st.stop()
+
+# ---------- 讀取球員資料 ----------
+try:
+    players_df = pd.read_csv("players_db.csv")
+    if "name" not in players_df.columns:
+        st.error("❌ players_db.csv 缺少必要欄位 'name'，請檢查檔案格式。")
+        st.stop()
+    st.success("✅ 成功載入 players_db.csv")
+    with st.expander("🔍 預覽球員資料", expanded=True):
+        st.dataframe(players_df.head(20), use_container_width=True)
+except FileNotFoundError:
+    st.error("❌ 找不到 players_db.csv，請確認檔案與程式在同一資料夾。")
+    st.stop()
+except Exception as e:
+    st.error(f"讀取 players_db.csv 發生錯誤：{e}")
+    st.stop()
+
+# ---------- 後續流程入口 ----------
+st.caption("✅ 資料載入完成，可進入主球員設定、讓桿、單洞賭金與比分表生成。")
+
 
 # 球場與區域
 course_name = st.selectbox("選擇球場", course_df["course_name"].unique())
