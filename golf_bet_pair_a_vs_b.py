@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from streamlit.components.v1 import html
 
-st.set_page_config(page_title="高爾夫Match play-1 vs N", layout="wide")
+st.set_page_config(page_title="高爾夫比分1對多", layout="wide")
 st.title("⛳ 高爾夫Match play - 1 vs N")
 
 # 自定義數字輸入欄位，強制 inputmode = numeric
