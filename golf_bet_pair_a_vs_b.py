@@ -3,7 +3,7 @@ import pandas as pd
 from streamlit.components.v1 import html
 
 st.set_page_config(page_title="高爾夫比分1對多", layout="wide")
-st.title("⛳ 高爾夫高爾夫比分1對多")
+st.title("⛳ 高爾夫對賭")
 
 # 自定義數字輸入欄位，強制 inputmode = numeric
 def numeric_input_html(label, key):
