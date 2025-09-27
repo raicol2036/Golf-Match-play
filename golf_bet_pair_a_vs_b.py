@@ -1,170 +1,231 @@
 import streamlit as st
 import pandas as pd
 import io
+from collections import Counter
 
-st.set_page_config(page_title="鴻勁高球隊", layout="wide")
+st.set_page_config(page_title="鴻勁高球隊成績管理", layout="wide")
 
-# === 側邊選單 ===
-page = st.sidebar.radio("選擇功能頁面", ["成績管理", "比分對戰"])
+st.title("🏌️ 鴻勁高球隊成績管理")
 
-# === 共用資料 (讀取 CSV) ===
-players = pd.read_csv("players_db.csv", encoding="utf-8-sig")
+# === 載入 CSV ===
+players = pd.read_csv("players.csv", encoding="utf-8-sig")
 courses = pd.read_csv("course_db.csv", encoding="utf-8-sig")
 
 # 驗證欄位
 if not set(["name","handicap","champion","runnerup"]).issubset(players.columns):
-    st.error("❌ players.csv 欄位必須包含: name, handicap, champion, runnerup")
+    st.error("❌ players.csv 必須包含: name, handicap, champion, runnerup")
     st.stop()
 if not set(["course_name","area","hole","hcp","par"]).issubset(courses.columns):
-    st.error("❌ course_db.csv 欄位必須包含: course_name, area, hole, hcp, par")
+    st.error("❌ course_db.csv 必須包含: course_name, area, hole, hcp, par")
     st.stop()
 
-# --------------------------------------------------
-# 📄 Page 1: 成績管理
-# --------------------------------------------------
-if page == "成績管理":
-    st.title("🏌️ 鴻勁高球隊成績管理")
+# --- Sidebar 分頁 ---
+page = st.sidebar.radio("📑 選擇頁面", ["比賽設定", "成績輸入", "比賽結果與獎項", "匯出報表"])
 
-    # === 初始化 session_state，避免切換回來 reset ===
-    if "scores" not in st.session_state:
-        st.session_state["scores"] = {}
-    if "selected_players" not in st.session_state:
-        st.session_state["selected_players"] = []
-    if "course_selected" not in st.session_state:
-        st.session_state["course_selected"] = None
+# session_state 儲存
+if "scores" not in st.session_state: st.session_state.scores = {}
+if "course_selected" not in st.session_state: st.session_state.course_selected = None
+if "selected_players" not in st.session_state: st.session_state.selected_players = []
+if "winners" not in st.session_state: st.session_state.winners = None
+if "awards" not in st.session_state: st.session_state.awards = {}
 
-    # Step 1: 選擇球場
+# === 共用計算函式 ===
+def calculate_gross(scores):
+    return {p: sum(s) for p, s in scores.items() if s}
+
+def calculate_net(gross_scores):
+    net_scores = {}
+    for p, gross in gross_scores.items():
+        hcp = int(players.loc[players["name"] == p, "handicap"].values[0])
+        net_scores[p] = gross - hcp
+    return net_scores
+
+def find_birdies(scores, course_selected):
+    birdies = []
+    for p, s in scores.items():
+        for i, score in enumerate(s):
+            if i < len(course_selected):
+                par = course_selected.iloc[i]["par"]
+                if score == par - 1:
+                    hole_num = course_selected.iloc[i]["hole"]
+                    birdies.append((p, hole_num))
+    return birdies
+
+def get_winners(scores, course_selected):
+    gross = calculate_gross(scores)
+    net = calculate_net(gross)
+    birdies = find_birdies(scores, course_selected)
+
+    gross_sorted = sorted(gross.items(), key=lambda x: x[1])
+
+    # 總桿冠軍
+    gross_champ = None
+    for p, _ in gross_sorted:
+        if players.loc[players["name"]==p,"champion"].values[0] == "No":
+            gross_champ = p
+            break
+
+    # 總桿亞軍
+    gross_runner = None
+    for p, _ in gross_sorted:
+        if p != gross_champ and players.loc[players["name"]==p,"runnerup"].values[0] == "No":
+            gross_runner = p
+            break
+
+    exclude_players = [gross_champ, gross_runner]
+    net_candidates = {p:s for p,s in net.items() if p not in exclude_players}
+    net_sorted = sorted(net_candidates.items(), key=lambda x: x[1])
+
+    net_champ, net_runner = None, None
+    if len(net_sorted) > 0: net_champ = net_sorted[0][0]
+    if len(net_sorted) > 1: net_runner = net_sorted[1][0]
+
+    hcp_updates = {p: 0 for p in gross.keys()}
+    if net_champ: hcp_updates[net_champ] = -2
+    if net_runner: hcp_updates[net_runner] = -1
+
+    hcp_new = {p: int(players.loc[players["name"] == p, "handicap"].values[0]) + hcp_updates[p] for p in gross.keys()}
+
+    return {
+        "gross": gross,
+        "net": net,
+        "gross_champion": gross_champ,
+        "gross_runnerup": gross_runner,
+        "net_champion": net_champ,
+        "net_runnerup": net_runner,
+        "birdies": birdies,
+        "hcp_new": hcp_new,
+    }
+
+# ------------------ 分頁內容 ------------------
+
+# === 比賽設定 ===
+if page == "比賽設定":
+    st.header("⚙️ 比賽設定")
+
     course_names = courses["course_name"].unique()
-    selected_course = st.selectbox("🏌️‍♂️ 選擇球場", course_names, key="selected_course")
+    selected_course = st.selectbox("🏌️‍♂️ 選擇球場", course_names)
     course_filtered = courses[courses["course_name"] == selected_course]
-
     all_areas = course_filtered["area"].unique()
-    selected_front = st.selectbox("前九洞區域", all_areas, key="front_area")
+
+    selected_front = st.selectbox("前九洞區域", all_areas)
     back_options = [a for a in all_areas if a != selected_front]
-    selected_back = st.selectbox("後九洞區域", back_options, key="back_area")
+    selected_back = st.selectbox("後九洞區域", back_options)
 
     course_selected = pd.concat([
         course_filtered[course_filtered["area"] == selected_front].sort_values("hole"),
         course_filtered[course_filtered["area"] == selected_back].sort_values("hole")
     ]).reset_index(drop=True)
 
-    st.success(f"✅ 已選擇：{selected_course} / 前九: {selected_front} / 後九: {selected_back} （共 {len(course_selected)} 洞）")
+    st.session_state.course_selected = course_selected
+    st.success(f"✅ 已選擇：{selected_course} / 前九: {selected_front} / 後九: {selected_back}")
 
-    # Step 2: 設定人數
-    st.header("1. 設定比賽人數")
-    num_players = st.number_input(
-        "請輸入參賽人數 (1~24)", 
-        min_value=1, max_value=24, value=4, step=1, key="num_players"
-    )
+    st.session_state.num_players = st.number_input("請輸入參賽人數 (1~24)", 1, 24, 4)
 
-    # Step 3: 選擇球員 & 輸入成績
-    st.header("2. 輸入比賽成績 (連續輸入18位數字)")
+# === 成績輸入 ===
+elif page == "成績輸入":
+    st.header("✍️ 輸入比賽成績")
+    scores = {}
     selected_players = []
 
-    for i in range(num_players):
+    for i in range(st.session_state.num_players):
         st.subheader(f"球員 {i+1}")
-        cols = st.columns([1, 2])
-
-        # 球員選擇
+        cols = st.columns([1,2])
         with cols[0]:
-            player_name = st.selectbox(
-                f"選擇球員 {i+1}",
-                players["name"].values,
-                key=f"player_{i}"
-            )
+            player_name = st.selectbox(f"選擇球員 {i+1}", players["name"].values, key=f"player_{i}")
             selected_players.append(player_name)
-
-        # 成績輸入
         with cols[1]:
-            score_str = st.text_input(
-                f"{player_name} 的成績 (18位數字)",
-                key=f"scores_{i}",
-                max_chars=18
-            )
+            score_str = st.text_input(f"{player_name} 的成績 (18位數字)", key=f"scores_{i}", max_chars=18)
 
-        # 驗證並保存到 session_state
         if score_str and score_str.isdigit() and len(score_str) == 18:
-            st.session_state["scores"][player_name] = [int(x) for x in score_str]
+            scores[player_name] = [int(x) for x in score_str]
         else:
-            st.session_state["scores"][player_name] = []
+            scores[player_name] = []
 
-    # 更新到 session_state
-    st.session_state["selected_players"] = selected_players
-    st.session_state["course_selected"] = course_selected
+    st.session_state.scores = scores
+    st.session_state.selected_players = selected_players
 
-    st.info("✅ 成績已保存，可以切換到『比分對戰』頁面進行 Match Play")
+# === 比賽結果與獎項 ===
+elif page == "比賽結果與獎項":
+    st.header("🏆 比賽結果")
 
-# --------------------------------------------------
-# 📄 Page 2: 比分對戰
-# --------------------------------------------------
-elif page == "比分對戰":
-    st.title("⚔️ 球員逐洞比分 Match Play")
+    if st.session_state.scores:
+        winners = get_winners(st.session_state.scores, st.session_state.course_selected)
+        st.session_state.winners = winners
 
-    if "scores" not in st.session_state or "selected_players" not in st.session_state:
-        st.warning("請先到『成績管理』頁面輸入球員與成績")
-        st.stop()
+        col1, col2 = st.columns(2)
+        col1.write(f"🏅 總桿冠軍: {winners['gross_champion']}")
+        col2.write(f"🥈 總桿亞軍: {winners['gross_runnerup']}")
 
-    scores = st.session_state["scores"]
-    selected_players = st.session_state["selected_players"]
-    course_selected = st.session_state["course_selected"]
-    par = course_selected["par"].tolist()
-    hcp = course_selected["hcp"].tolist()
+        col3, col4 = st.columns(2)
+        col3.write(f"🏅 淨桿冠軍: {winners['net_champion']}")
+        col4.write(f"🥈 淨桿亞軍: {winners['net_runnerup']}")
 
-    # Step 1: 選擇主球員
-    player_a = st.selectbox("選擇主球員 A", selected_players, key="main_player")
+        if winners["birdies"]:
+            st.write("✨ Birdie 紀錄：")
+            birdie_dict = {}
+            for player, hole in winners["birdies"]:
+                birdie_dict.setdefault(player, []).append(hole)
+            for player, holes in birdie_dict.items():
+                holes_sorted = sorted(holes)
+                st.write(f"- {player} 第{'/'.join([str(h)+'洞' for h in holes_sorted])}")
+        else:
+            st.write("無 Birdie 紀錄")
 
-    # Step 2: 對手設定
-    opponents = [p for p in selected_players if p != player_a]
-    handicaps, bets = {}, {}
+        # 獎項選擇
+        st.subheader("🎯 獎項選擇")
+        long_drive = st.multiselect("🏌️‍♂️ 遠距獎", players["name"].values, max_selections=2)
+        near1 = st.multiselect("🎯 一近洞獎", players["name"].values, max_selections=2)
+        num_n_near = st.number_input("N近洞獎數量", 0, 18, 0)
+        n_near_awards = []
+        for i in range(num_n_near):
+            player = st.selectbox(f"N近洞獎 第{i+1}名", ["無"]+list(players["name"].values), key=f"n_near_{i}")
+            if player != "無": n_near_awards.append(player)
 
-    for op in opponents:
-        st.markdown(f"### 對手：{op}")
-        cols = st.columns([1, 1])
-        with cols[0]:
-            handicaps[op] = st.number_input(f"{op} 對 {player_a} 讓桿", -18, 18, 0, key=f"hcp_{op}")
-        with cols[1]:
-            bets[op] = st.number_input("每洞賭金", 50, 1000, 100, step=50, key=f"bet_{op}")
+        awards = {"遠距獎": long_drive, "一近洞獎": near1, "N近洞獎": n_near_awards}
+        st.session_state.awards = awards
 
-    # Step 3: 開始比分計算
-    if st.button("開始比分計算"):
-        total_earnings = {p: 0 for p in selected_players}
-        result_tracker = {p: {"win": 0, "lose": 0, "tie": 0} for p in selected_players}
+        # 顯示獎項結果
+        st.subheader("🏅 特殊獎項結果")
+        award_texts = []
+        for k, v in awards.items():
+            if k=="N近洞獎":
+                counts = Counter(v)
+                formatted = " ".join([f"{name}*{cnt}" for name, cnt in counts.items()])
+                award_texts.append(f"**{k}** {formatted if formatted else '無'}")
+            else:
+                award_texts.append(f"**{k}** {', '.join(v) if v else '無'}")
+        st.markdown(" ｜ ".join(award_texts))
 
-        for i in range(18):
-            score_main = scores[player_a][i]
-            for op in opponents:
-                score_op = scores[op][i]
+# === 匯出報表 ===
+elif page == "匯出報表":
+    st.header("💾 匯出比賽結果")
+    if st.session_state.winners:
+        winners = st.session_state.winners
+        awards = st.session_state.awards
 
-                adj_main, adj_op = score_main, score_op
-                if handicaps[op] > 0 and hcp[i] <= handicaps[op]:
-                    adj_op -= 1
+        player_hcps = {p: int(players.loc[players["name"] == p, "handicap"].values[0]) for p in winners["gross"].keys()}
+        df_leader = pd.DataFrame({
+            "球員": list(winners["gross"].keys()),
+            "原始差點": [player_hcps[p] for p in winners["gross"].keys()],
+            "總桿": list(winners["gross"].values()),
+            "淨桿": [winners["net"][p] for p in winners["gross"].keys()],
+            "總桿排名": pd.Series(winners["gross"]).rank(method="min").astype(int).values,
+            "淨桿排名": pd.Series(winners["net"]).rank(method="min").astype(int).values,
+            "差點更新": [winners["hcp_new"][p] for p in winners["gross"].keys()]
+        })
 
-                if adj_op < adj_main:  # 對手勝
-                    bonus = 2 if score_op < par[i] else 1
-                    total_earnings[op] += bets[op] * bonus
-                    total_earnings[player_a] -= bets[op] * bonus
-                    result_tracker[op]["win"] += 1
-                    result_tracker[player_a]["lose"] += 1
-                elif adj_op > adj_main:  # 主球員勝
-                    bonus = 2 if score_main < par[i] else 1
-                    total_earnings[player_a] += bets[op] * bonus
-                    total_earnings[op] -= bets[op] * bonus
-                    result_tracker[player_a]["win"] += 1
-                    result_tracker[op]["lose"] += 1
-                else:  # 平手
-                    result_tracker[player_a]["tie"] += 1
-                    result_tracker[op]["tie"] += 1
+        csv_buffer = io.StringIO()
+        df_leader.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+        st.download_button("📥 下載 CSV", data=csv_buffer.getvalue(),
+                           file_name="leaderboard.csv", mime="text/csv")
 
-        # 輸出總結
-        df_summary = pd.DataFrame([
-            {
-                "球員": p,
-                "總賭金": total_earnings[p],
-                "勝": result_tracker[p]["win"],
-                "負": result_tracker[p]["lose"],
-                "平": result_tracker[p]["tie"],
-                "淨勝洞": result_tracker[p]["win"] - result_tracker[p]["lose"]
-            }
-            for p in selected_players
-        ])
-        st.dataframe(df_summary.set_index("球員"))
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+            df_leader.to_excel(writer, sheet_name="Leaderboard", index=False)
+            # 獎項
+            awards_df = pd.DataFrame([{"獎項": k, "得獎名單": ", ".join(v) if v else "無"} for k,v in awards.items()])
+            awards_df.to_excel(writer, sheet_name="Awards", index=False)
+        st.download_button("📥 下載 Excel", data=excel_buffer.getvalue(),
+                           file_name="leaderboard.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
