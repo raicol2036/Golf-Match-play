@@ -91,12 +91,14 @@ score_data = {p: [] for p in all_players}
 total_earnings = {p: 0 for p in all_players}
 result_tracker = {p: {"win": 0, "lose": 0, "tie": 0} for p in all_players}
 
-# ---------- 快速輸入處理 ----------
-quick_scores = {}
+# ---------- 快速輸入處理（修正版） ----------
 for p in all_players:
     value = st.session_state.get(f"quick_{p}", "")
     if value and len(value) == 18 and value.isdigit():
-        quick_scores[p] = [int(c) for c in value]
+        scores = [int(c) for c in value]
+        for i, s in enumerate(scores):
+            key = f"{p}_score_{i}"
+            st.session_state[key] = s  # 🔑 回填到 session_state
     elif value:
         st.error(f"⚠️ {p} 快速成績需為18位數字串")
 
@@ -108,14 +110,12 @@ for i in range(18):
     cols = st.columns(1 + len(opponents))
 
     # 主球員
-    default_score = quick_scores[player_a][i] if player_a in quick_scores else par[i]
-    score_main = cols[0].number_input("", 1, 15, default_score, key=f"{player_a}_score_{i}", label_visibility="collapsed")
+    score_main = cols[0].number_input("", 1, 15, key=f"{player_a}_score_{i}", label_visibility="collapsed")
     score_data[player_a].append(score_main)
 
     # 對手逐一比較
     for idx, op in enumerate(opponents):
-        default_score = quick_scores[op][i] if op in quick_scores else par[i]
-        score_op = cols[idx + 1].number_input("", 1, 15, default_score, key=f"{op}_score_{i}", label_visibility="collapsed")
+        score_op = cols[idx + 1].number_input("", 1, 15, key=f"{op}_score_{i}", label_visibility="collapsed")
         score_data[op].append(score_op)
 
         # --- 逐洞一對一讓桿 ---
