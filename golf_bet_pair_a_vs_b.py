@@ -4,23 +4,46 @@ from streamlit.components.v1 import html
 from io import BytesIO
 
 st.set_page_config(page_title="高爾夫比分1對多", layout="wide")
-st.title("⛳ 高爾夫對賭（快速輸入版＋逐洞明細）")
+st.title("⛳ 高爾夫對賭（快速輸入＋逐洞明細＋字數驗證）")
 
-# 自定義數字輸入欄位
+# 自定義數字輸入欄位 (新增字數驗證)
 def numeric_input_html(label, key):
     value = st.session_state.get(key, "")
     html(f"""
         <label for="{key}" style="font-weight:bold">{label}</label><br>
-        <input id="{key}" name="{key}" inputmode="numeric" pattern="[0-9]*" maxlength="18"
-               style="width:100%; font-size:1.1em; padding:0.5em;" value="{value}" />
+        <input id="{key}" name="{key}" inputmode="numeric" pattern="[0-9]*"
+               style="width:100%; font-size:1.1em; padding:0.5em; border:2px solid #ccc; border-radius:5px;"
+               maxlength="18" value="{value}" />
+        <small id="{key}_counter" style="color:gray">{len(value)}/18</small>
         <script>
         const input = window.parent.document.getElementById('{key}');
-        input.addEventListener('input', () => {{
-            const value = input.value;
-            window.parent.postMessage({{isStreamlitMessage: true, type: 'streamlit:setComponentValue', key: '{key}', value}}, '*');
-        }});
+        const counter = window.parent.document.getElementById('{key}_counter');
+
+        function updateCounter() {{
+            const val = input.value.replace(/[^0-9]/g, ''); // 只允許數字
+            input.value = val;
+            counter.innerText = val.length + "/18";
+
+            if (val.length === 18) {{
+                input.style.borderColor = "green";
+                counter.style.color = "green";
+            }} else {{
+                input.style.borderColor = "red";
+                counter.style.color = "red";
+            }}
+
+            window.parent.postMessage({{
+                isStreamlitMessage: true,
+                type: 'streamlit:setComponentValue',
+                key: '{key}',
+                value: val
+            }}, '*');
+        }}
+
+        input.addEventListener('input', updateCounter);
+        updateCounter();
         </script>
-    """, height=100)
+    """, height=120)
 
 # ---------- 讀取資料 ----------
 course_df = pd.read_csv("course_db.csv")
@@ -75,11 +98,22 @@ all_players = [player_a] + opponents
 scores = {}
 for p in all_players:
     value = st.session_state.get(f"quick_{p}", "")
-    if value and len(value) == 18 and value.isdigit():
-        scores[p] = [int(c) for c in value]
+    if value:
+        clean_value = "".join([c for c in value if c.isdigit()])  # 🔑 僅保留數字
+        if len(clean_value) == 18:
+            scores[p] = [int(c) for c in clean_value]
+        else:
+            if p == player_a:  # 主球員必須正確
+                st.warning(f"⚠️ {p} 必須輸入18位數字串 (目前長度: {len(clean_value)})")
+                st.stop()
+            else:  # 對手不完整就跳過
+                st.info(f"ℹ️ {p} 尚未輸入完整成績，將不計算")
     else:
-        st.warning(f"⚠️ {p} 請輸入18位數字串")
-        st.stop()
+        if p == player_a:
+            st.warning(f"⚠️ {p} 必須輸入18位數字串")
+            st.stop()
+        else:
+            st.info(f"ℹ️ {p} 尚未輸入成績，將不計算")
 
 # ---------- 計算勝負 ----------
 total_earnings = {p: 0 for p in all_players}
@@ -89,6 +123,8 @@ detail_rows = []
 for i in range(18):
     score_main = scores[player_a][i]
     for op in opponents:
+        if op not in scores:  # 沒有輸入就跳過
+            continue
         score_op = scores[op][i]
 
         adj_main, adj_op = score_main, score_op
@@ -99,7 +135,6 @@ for i in range(18):
             else:
                 adj_main -= 1
 
-        # 勝負判斷
         if adj_op < adj_main:
             emoji = "👑"
             bonus = 2 if score_op < par[i] else 1
@@ -122,7 +157,6 @@ for i in range(18):
             result_tracker[player_a]["tie"] += 1
             result_tracker[op]["tie"] += 1
 
-        # 記錄逐洞明細
         detail_rows.append({
             "洞": i + 1,
             "Par": par[i],
@@ -159,11 +193,9 @@ st.dataframe(detail_df)
 
 # ---------- 匯出功能 ----------
 st.markdown("### 💾 匯出比賽結果")
-# 匯出 CSV
 csv = detail_df.to_csv(index=False).encode("utf-8-sig")
 st.download_button("⬇️ 下載逐洞明細 (CSV)", csv, "golf_details.csv", "text/csv")
 
-# 匯出 Excel
 output = BytesIO()
 with pd.ExcelWriter(output, engine="openpyxl") as writer:
     summary_df.to_excel(writer, index=False, sheet_name="總結結果")
