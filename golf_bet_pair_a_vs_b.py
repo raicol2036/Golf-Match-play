@@ -8,7 +8,7 @@ st.set_page_config(page_title="鴻勁高球隊", layout="wide")
 page = st.sidebar.radio("選擇功能頁面", ["成績管理", "比分對戰"])
 
 # === 共用資料 (讀取 CSV) ===
-players = pd.read_csv("players_db.csv", encoding="utf-8-sig")
+players = pd.read_csv("players.csv", encoding="utf-8-sig")
 courses = pd.read_csv("course_db.csv", encoding="utf-8-sig")
 
 # 驗證欄位
@@ -44,7 +44,7 @@ if page == "成績管理":
 
     # Step 2: 設定人數
     st.header("1. 設定比賽人數")
-    num_players = st.number_input("請輸入參賽人數 (1~24)", min_value=1, max_value=24, value=4, step=1)
+    num_players = st.number_input("請輸入參賽人數 (1~24)", min_value=1, max_value=24, value=4, step=1, key="num_players")
 
     # Step 3: 選擇球員 & 輸入成績
     st.header("2. 輸入比賽成績 (連續輸入18位數字)")
@@ -74,8 +74,7 @@ if page == "成績管理":
     st.session_state["selected_players"] = selected_players
     st.session_state["course_selected"] = course_selected
 
-    # Step 4: 計算與顯示結果 (略，保留你原本的總桿/淨桿/獎項/Leaderboard邏輯)
-    # ...
+    st.info("✅ 成績已保存，可以切換到『比分對戰』頁面進行 Match Play")
 
 # --------------------------------------------------
 # 📄 Page 2: 比分對戰
@@ -94,7 +93,7 @@ elif page == "比分對戰":
     hcp = course_selected["hcp"].tolist()
 
     # Step 1: 選擇主球員
-    player_a = st.selectbox("選擇主球員 A", selected_players)
+    player_a = st.selectbox("選擇主球員 A", selected_players, key="main_player")
 
     # Step 2: 對手設定
     opponents = [p for p in selected_players if p != player_a]
@@ -104,7 +103,7 @@ elif page == "比分對戰":
         st.markdown(f"### 對手：{op}")
         cols = st.columns([1, 1])
         with cols[0]:
-            handicaps[op] = st.number_input(f"{player_a} 對 {op} 讓桿", -18, 18, 0, key=f"hcp_{op}")
+            handicaps[op] = st.number_input(f"{op} 對 {player_a} 讓桿", -18, 18, 0, key=f"hcp_{op}")
         with cols[1]:
             bets[op] = st.number_input("每洞賭金", 50, 1000, 100, step=50, key=f"bet_{op}")
 
@@ -145,7 +144,8 @@ elif page == "比分對戰":
                 "總賭金": total_earnings[p],
                 "勝": result_tracker[p]["win"],
                 "負": result_tracker[p]["lose"],
-                "平": result_tracker[p]["tie"]
+                "平": result_tracker[p]["tie"],
+                "淨勝洞": result_tracker[p]["win"] - result_tracker[p]["lose"]
             }
             for p in selected_players
         ])
