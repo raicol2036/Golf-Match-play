@@ -104,7 +104,7 @@ elif page == "比分對戰":
         st.markdown(f"### 對手：{op}")
         cols = st.columns([1, 1])
         with cols[0]:
-            handicaps[op] = st.number_input(f"{op} 對 {player_a} 讓桿", -18, 18, 0, key=f"hcp_{op}")
+            handicaps[op] = st.number_input(f"{player_a} 對 {op} 讓桿", -18, 18, 0, key=f"hcp_{op}")
         with cols[1]:
             bets[op] = st.number_input("每洞賭金", 50, 1000, 100, step=50, key=f"bet_{op}")
 
