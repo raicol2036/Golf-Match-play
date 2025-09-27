@@ -8,7 +8,7 @@ st.set_page_config(page_title="鴻勁高球隊", layout="wide")
 page = st.sidebar.radio("選擇功能頁面", ["成績管理", "比分對戰"])
 
 # === 共用資料 (讀取 CSV) ===
-players = pd.read_csv("players.csv", encoding="utf-8-sig")
+players = pd.read_csv("players_db.csv", encoding="utf-8-sig")
 courses = pd.read_csv("course_db.csv", encoding="utf-8-sig")
 
 # --------------------------------------------------
