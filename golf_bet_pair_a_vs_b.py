@@ -4,9 +4,9 @@ from streamlit.components.v1 import html
 from io import BytesIO
 
 st.set_page_config(page_title="高爾夫比分1對多", layout="wide")
-st.title("⛳ 高爾夫對賭（快速輸入＋逐洞明細＋字數驗證）")
+st.title("⛳ 高爾夫對賭（快速輸入＋逐洞明細＋iOS防呆版）")
 
-# 自定義數字輸入欄位 (新增字數驗證)
+# 自定義數字輸入欄位 (支援 iOS, 顯示字數)
 def numeric_input_html(label, key):
     value = st.session_state.get(key, "")
     html(f"""
@@ -20,11 +20,11 @@ def numeric_input_html(label, key):
         const counter = window.parent.document.getElementById('{key}_counter');
 
         function updateCounter() {{
-            const val = input.value.replace(/[^0-9]/g, ''); // 只允許數字
-            input.value = val;
-            counter.innerText = val.length + "/18";
+            const raw = input.value;                // 原始輸入 (可能有符號/全形字)
+            const clean = raw.replace(/[^0-9]/g, ''); // 過濾成純數字
+            counter.innerText = raw.length + "/18";   // 顯示原始長度
 
-            if (val.length === 18) {{
+            if (clean.length === 18) {{
                 input.style.borderColor = "green";
                 counter.style.color = "green";
             }} else {{
@@ -32,11 +32,12 @@ def numeric_input_html(label, key):
                 counter.style.color = "red";
             }}
 
+            // 傳給 Streamlit 的值 = 純數字
             window.parent.postMessage({{
                 isStreamlitMessage: true,
                 type: 'streamlit:setComponentValue',
                 key: '{key}',
-                value: val
+                value: clean
             }}, '*');
         }}
 
@@ -99,14 +100,14 @@ scores = {}
 for p in all_players:
     value = st.session_state.get(f"quick_{p}", "")
     if value:
-        clean_value = "".join([c for c in value if c.isdigit()])  # 🔑 僅保留數字
+        clean_value = "".join([c for c in value if c.isdigit()])
         if len(clean_value) == 18:
             scores[p] = [int(c) for c in clean_value]
         else:
-            if p == player_a:  # 主球員必須正確
+            if p == player_a:
                 st.warning(f"⚠️ {p} 必須輸入18位數字串 (目前長度: {len(clean_value)})")
                 st.stop()
-            else:  # 對手不完整就跳過
+            else:
                 st.info(f"ℹ️ {p} 尚未輸入完整成績，將不計算")
     else:
         if p == player_a:
@@ -123,7 +124,7 @@ detail_rows = []
 for i in range(18):
     score_main = scores[player_a][i]
     for op in opponents:
-        if op not in scores:  # 沒有輸入就跳過
+        if op not in scores:
             continue
         score_op = scores[op][i]
 
