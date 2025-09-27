@@ -1,210 +1,232 @@
 import streamlit as st
 import pandas as pd
-from streamlit.components.v1 import html
-from io import BytesIO
+import io
 
-st.set_page_config(page_title="高爾夫比分1對多", layout="wide")
-st.title("⛳ 高爾夫對賭（快速輸入＋逐洞明細＋iOS防呆版）")
+st.set_page_config(page_title="鴻勁高球隊", layout="wide")
 
-# 自定義數字輸入欄位 (支援 iOS, 顯示字數)
-def numeric_input_html(label, key):
-    value = st.session_state.get(key, "")
-    html(f"""
-        <label for="{key}" style="font-weight:bold">{label}</label><br>
-        <input id="{key}" name="{key}" inputmode="numeric" pattern="[0-9]*"
-               style="width:100%; font-size:1.1em; padding:0.5em; border:2px solid #ccc; border-radius:5px;"
-               maxlength="18" value="{value}" />
-        <small id="{key}_counter" style="color:gray">{len(value)}/18</small>
-        <script>
-        const input = window.parent.document.getElementById('{key}');
-        const counter = window.parent.document.getElementById('{key}_counter');
+# === 側邊選單 ===
+page = st.sidebar.radio("選擇功能頁面", ["成績管理", "比分對戰"])
 
-        function updateCounter() {{
-            const raw = input.value;                // 原始輸入 (可能有符號/全形字)
-            const clean = raw.replace(/[^0-9]/g, ''); // 過濾成純數字
-            counter.innerText = raw.length + "/18";   // 顯示原始長度
+# === 共用資料 (讀取 CSV) ===
+players = pd.read_csv("players.csv", encoding="utf-8-sig")
+courses = pd.read_csv("course_db.csv", encoding="utf-8-sig")
 
-            if (clean.length === 18) {{
-                input.style.borderColor = "green";
-                counter.style.color = "green";
-            }} else {{
-                input.style.borderColor = "red";
-                counter.style.color = "red";
-            }}
+# --------------------------------------------------
+# 📄 Page 1: 成績管理
+# --------------------------------------------------
+if page == "成績管理":
+    st.title("🏌️ 鴻勁高球隊成績管理")
 
-            // 傳給 Streamlit 的值 = 純數字
-            window.parent.postMessage({{
-                isStreamlitMessage: true,
-                type: 'streamlit:setComponentValue',
-                key: '{key}',
-                value: clean
-            }}, '*');
-        }}
-
-        input.addEventListener('input', updateCounter);
-        updateCounter();
-        </script>
-    """, height=120)
-
-# ---------- 讀取資料 ----------
-course_df = pd.read_csv("course_db.csv")
-players_df = pd.read_csv("players_db.csv")
-
-# ---------- 球場選擇 ----------
-course_name = st.selectbox("選擇球場", course_df["course_name"].unique())
-zones = course_df[course_df["course_name"] == course_name]["area"].unique()
-zone_front = st.selectbox("前九洞區域", zones)
-zone_back = st.selectbox("後九洞區域", zones)
-
-holes_front = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_front)].sort_values("hole")
-holes_back = course_df[(course_df["course_name"] == course_name) & (course_df["area"] == zone_back)].sort_values("hole")
-holes = pd.concat([holes_front, holes_back]).reset_index(drop=True)
-par = holes["par"].tolist()
-hcp = holes["hcp"].tolist()
-
-# ---------- 球員設定 ----------
-st.markdown("### 🎯 球員設定")
-player_list = ["請選擇球員"] + players_df["name"].tolist()
-player_list_with_done = player_list + ["✅ Done"]
-
-player_a = st.selectbox("選擇主球員 A", player_list)
-if player_a == "請選擇球員":
-    st.stop()
-
-numeric_input_html("主球員快速成績輸入（18位數）", key=f"quick_{player_a}")
-handicaps = {player_a: st.number_input(f"{player_a} 差點", 0, 54, 0, key="hcp_main")}
-
-opponents, bets = [], {}
-for i in range(1, 5):
-    st.markdown(f"#### 對手球員 B{i}")
-    cols = st.columns([2, 1, 1])
-    with cols[0]:
-        name = st.selectbox(f"球員 B{i} 名稱", player_list_with_done, key=f"b{i}_name")
-    if name == "請選擇球員":
+    # === 驗證欄位 ===
+    if not set(["name","handicap","champion","runnerup"]).issubset(players.columns):
+        st.error("❌ players.csv 欄位必須包含: name, handicap, champion, runnerup")
         st.stop()
-    if name == "✅ Done":
-        break
-    if name in [player_a] + opponents:
+    if not set(["course_name","area","hole","hcp","par"]).issubset(courses.columns):
+        st.error("❌ course_db.csv 欄位必須包含: course_name, area, hole, hcp, par")
         st.stop()
-    opponents.append(name)
-    numeric_input_html(f"{name} 快速成績輸入（18位數）", key=f"quick_{name}")
-    with cols[1]:
-        handicaps[name] = st.number_input("差點", 0, 54, 0, key=f"hcp_b{i}")
-    with cols[2]:
-        bets[name] = st.number_input("每洞賭金", 10, 1000, 100, key=f"bet_b{i}")
 
-all_players = [player_a] + opponents
+    st.header("0. 比賽設定")
 
-# ---------- 快速輸入轉換 ----------
-scores = {}
-for p in all_players:
-    value = st.session_state.get(f"quick_{p}", "")
-    if value:
-        clean_value = "".join([c for c in value if c.isdigit()])
-        if len(clean_value) == 18:
-            scores[p] = [int(c) for c in clean_value]
-        else:
-            if p == player_a:
-                st.warning(f"⚠️ {p} 必須輸入18位數字串 (目前長度: {len(clean_value)})")
-                st.stop()
+    # Step 1: 選擇球場
+    course_names = courses["course_name"].unique()
+    selected_course = st.selectbox("🏌️‍♂️ 選擇球場", course_names)
+
+    course_filtered = courses[courses["course_name"] == selected_course]
+    all_areas = course_filtered["area"].unique()
+
+    selected_front = st.selectbox("前九洞區域", all_areas)
+    back_options = [a for a in all_areas if a != selected_front]
+    selected_back = st.selectbox("後九洞區域", back_options)
+
+    course_selected = pd.concat([
+        course_filtered[course_filtered["area"] == selected_front].sort_values("hole"),
+        course_filtered[course_filtered["area"] == selected_back].sort_values("hole")
+    ]).reset_index(drop=True)
+
+    st.success(f"✅ 已選擇：{selected_course} / 前九: {selected_front} / 後九: {selected_back} （共 {len(course_selected)} 洞）")
+
+    # === 設定比賽人數 ===
+    st.header("1. 設定比賽人數")
+    num_players = st.number_input("請輸入參賽人數 (1~24)", min_value=1, max_value=24, value=4, step=1)
+
+    # === 輸入球員與成績 ===
+    st.header("2. 輸入比賽成績 (連續輸入18位數字)")
+    scores = {}
+    selected_players = []
+
+    for i in range(num_players):
+        st.subheader(f"球員 {i+1}")
+        cols = st.columns([1, 2])
+
+        with cols[0]:
+            player_name = st.selectbox(
+                f"選擇球員 {i+1}",
+                players["name"].values,
+                key=f"player_{i}"
+            )
+            selected_players.append(player_name)
+
+        with cols[1]:
+            score_str = st.text_input(
+                f"{player_name} 的成績 (18位數字)",
+                key=f"scores_{i}",
+                max_chars=18
+            )
+
+        if score_str:
+            if score_str.isdigit() and len(score_str) == 18:
+                scores[player_name] = [int(x) for x in score_str]
             else:
-                st.info(f"ℹ️ {p} 尚未輸入完整成績，將不計算")
-    else:
-        if p == player_a:
-            st.warning(f"⚠️ {p} 必須輸入18位數字串")
-            st.stop()
+                st.error(f"⚠️ {player_name} 成績必須是剛好 18 位數字")
+                scores[player_name] = []
         else:
-            st.info(f"ℹ️ {p} 尚未輸入成績，將不計算")
+            scores[player_name] = []
 
-# ---------- 計算勝負 ----------
-total_earnings = {p: 0 for p in all_players}
-result_tracker = {p: {"win": 0, "lose": 0, "tie": 0} for p in all_players}
-detail_rows = []
+    # 存進 session_state 供 Page2 使用
+    st.session_state["scores"] = scores
+    st.session_state["selected_players"] = selected_players
+    st.session_state["course_selected"] = course_selected
 
-for i in range(18):
-    score_main = scores[player_a][i]
-    for op in opponents:
-        if op not in scores:
-            continue
-        score_op = scores[op][i]
+    # === 計算比賽結果 ===
+    def calculate_gross(scores):
+        return {p: sum(s) for p, s in scores.items() if s}
 
-        adj_main, adj_op = score_main, score_op
-        diff = abs(handicaps[player_a] - handicaps[op])
-        if diff > 0 and hcp[i] <= diff:
-            if handicaps[player_a] < handicaps[op]:
-                adj_op -= 1
-            else:
-                adj_main -= 1
+    def calculate_net(gross_scores):
+        net_scores = {}
+        for p, gross in gross_scores.items():
+            hcp = int(players.loc[players["name"] == p, "handicap"].values[0])
+            net_scores[p] = gross - hcp
+        return net_scores
 
-        if adj_op < adj_main:
-            emoji = "👑"
-            bonus = 2 if score_op < par[i] else 1
-            earn_main, earn_op = -bets[op] * bonus, bets[op] * bonus
-            total_earnings[op] += earn_op
-            total_earnings[player_a] += earn_main
-            result_tracker[op]["win"] += 1
-            result_tracker[player_a]["lose"] += 1
-        elif adj_op > adj_main:
-            emoji = "👽"
-            bonus = 2 if score_main < par[i] else 1
-            earn_main, earn_op = bets[op] * bonus, -bets[op] * bonus
-            total_earnings[player_a] += earn_main
-            total_earnings[op] += earn_op
-            result_tracker[player_a]["win"] += 1
-            result_tracker[op]["lose"] += 1
+    def find_birdies(scores, course_selected):
+        birdies = []
+        for p, s in scores.items():
+            for i, score in enumerate(s):
+                if i < len(course_selected):
+                    par = course_selected.iloc[i]["par"]
+                    if score == par - 1:
+                        hole_num = course_selected.iloc[i]["hole"]
+                        birdies.append((p, hole_num))
+        return birdies
+
+    def get_winners(scores, course_selected):
+        gross = calculate_gross(scores)
+        net = calculate_net(gross)
+        birdies = find_birdies(scores, course_selected)
+
+        gross_sorted = sorted(gross.items(), key=lambda x: x[1])
+        gross_champ, gross_runner = None, None
+        for p, _ in gross_sorted:
+            if players.loc[players["name"]==p,"champion"].values[0] == "No":
+                gross_champ = p
+                break
+        for p, _ in gross_sorted:
+            if p != gross_champ and players.loc[players["name"]==p,"runnerup"].values[0] == "No":
+                gross_runner = p
+                break
+
+        exclude_players = [gross_champ, gross_runner]
+        net_candidates = {p:s for p,s in net.items() if p not in exclude_players}
+        net_sorted = sorted(net_candidates.items(), key=lambda x: x[1])
+        net_champ, net_runner = None, None
+        if len(net_sorted) > 0: net_champ = net_sorted[0][0]
+        if len(net_sorted) > 1: net_runner = net_sorted[1][0]
+
+        hcp_updates = {p: 0 for p in gross.keys()}
+        if net_champ: hcp_updates[net_champ] = -2
+        if net_runner: hcp_updates[net_runner] = -1
+        hcp_new = {p: int(players.loc[players["name"] == p, "handicap"].values[0]) + hcp_updates[p] for p in gross.keys()}
+
+        return {
+            "gross": gross,
+            "net": net,
+            "gross_champion": gross_champ,
+            "gross_runnerup": gross_runner,
+            "net_champion": net_champ,
+            "net_runnerup": net_runner,
+            "birdies": birdies,
+            "hcp_new": hcp_new,
+        }
+
+    if st.button("開始計算"):
+        winners = get_winners(scores, course_selected)
+
+        st.subheader("🏆 比賽結果")
+        col1, col2 = st.columns(2)
+        with col1: st.write(f"🏅 總桿冠軍: {winners['gross_champion']}")
+        with col2: st.write(f"🥈 總桿亞軍: {winners['gross_runnerup']}")
+        col3, col4 = st.columns(2)
+        with col3: st.write(f"🏅 淨桿冠軍: {winners['net_champion']}")
+        with col4: st.write(f"🥈 淨桿亞軍: {winners['net_runnerup']}")
+
+        if winners["birdies"]:
+            st.write("✨ Birdie 紀錄：")
+            birdie_dict = {}
+            for player, hole in winners["birdies"]:
+                birdie_dict.setdefault(player, []).append(hole)
+            for player, holes in birdie_dict.items():
+                hole_text = "/".join([f"第{h}洞" for h in holes])
+                st.write(f"- {player} {hole_text}")
         else:
-            emoji = "⚖️"
-            earn_main, earn_op = 0, 0
-            result_tracker[player_a]["tie"] += 1
-            result_tracker[op]["tie"] += 1
+            st.write("無 Birdie 紀錄")
 
-        detail_rows.append({
-            "洞": i + 1,
-            "Par": par[i],
-            "HCP": hcp[i],
-            "球員": player_a,
-            "原始桿數": score_main,
-            "調整後": adj_main,
-            "對手": op,
-            "對手原始桿數": score_op,
-            "對手調整後": adj_op,
-            "結果": emoji,
-            "主球員變動": earn_main,
-            "對手變動": earn_op
+        # Leaderboard
+        st.subheader("📊 Leaderboard 排名表")
+        player_hcps = {p: int(players.loc[players["name"] == p, "handicap"].values[0]) for p in winners["gross"].keys()}
+        df_leader = pd.DataFrame({
+            "球員": list(winners["gross"].keys()),
+            "原始差點": [player_hcps[p] for p in winners["gross"].keys()],
+            "總桿": list(winners["gross"].values()),
+            "淨桿": [winners["net"][p] for p in winners["gross"].keys()],
+            "總桿排名": pd.Series(winners["gross"]).rank(method="min").astype(int).values,
+            "淨桿排名": pd.Series(winners["net"]).rank(method="min").astype(int).values,
+            "差點更新": [winners["hcp_new"][p] for p in winners["gross"].keys()]
         })
+        st.dataframe(df_leader.sort_values("淨桿排名"))
 
-# ---------- 總結 ----------
-st.markdown("### 📊 總結結果")
-summary_data = []
-for p in all_players:
-    summary_data.append({
-        "球員": p,
-        "總賭金結算": total_earnings[p],
-        "勝": result_tracker[p]["win"],
-        "負": result_tracker[p]["lose"],
-        "平": result_tracker[p]["tie"]
-    })
-summary_df = pd.DataFrame(summary_data)
-st.dataframe(summary_df.set_index("球員"))
+# --------------------------------------------------
+# 📄 Page 2: 比分對戰
+# --------------------------------------------------
+elif page == "比分對戰":
+    st.title("⚔️ 球員逐洞比分 Match Play")
 
-# ---------- 逐洞明細 ----------
-st.markdown("### 📒 逐洞明細表")
-detail_df = pd.DataFrame(detail_rows)
-st.dataframe(detail_df)
+    if "scores" not in st.session_state or "selected_players" not in st.session_state:
+        st.warning("⚠️ 請先到『成績管理』頁面輸入球員與成績")
+        st.stop()
 
-# ---------- 匯出功能 ----------
-st.markdown("### 💾 匯出比賽結果")
-csv = detail_df.to_csv(index=False).encode("utf-8-sig")
-st.download_button("⬇️ 下載逐洞明細 (CSV)", csv, "golf_details.csv", "text/csv")
+    scores = st.session_state["scores"]
+    selected_players = st.session_state["selected_players"]
 
-output = BytesIO()
-with pd.ExcelWriter(output, engine="openpyxl") as writer:
-    summary_df.to_excel(writer, index=False, sheet_name="總結結果")
-    detail_df.to_excel(writer, index=False, sheet_name="逐洞明細")
-excel_data = output.getvalue()
-st.download_button(
-    "⬇️ 下載完整報表 (Excel)",
-    excel_data,
-    "golf_results.xlsx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+    match_result = {p: {"win": 0, "lose": 0, "tie": 0} for p in selected_players}
+
+    for i in range(18):
+        hole_scores = {p: scores[p][i] for p in selected_players if scores[p]}
+        if not hole_scores:
+            continue
+        min_score = min(hole_scores.values())
+        winners = [p for p, s in hole_scores.items() if s == min_score]
+
+        if len(winners) == 1:
+            winner = winners[0]
+            match_result[winner]["win"] += 1
+            for p in selected_players:
+                if p != winner:
+                    match_result[p]["lose"] += 1
+        else:
+            for p in winners:
+                match_result[p]["tie"] += 1
+            for p in selected_players:
+                if p not in winners:
+                    match_result[p]["lose"] += 1
+
+    df_match = pd.DataFrame([
+        {
+            "球員": p,
+            "勝洞": r["win"],
+            "負洞": r["lose"],
+            "平洞": r["tie"],
+            "淨勝洞": r["win"] - r["lose"]
+        }
+        for p, r in match_result.items()
+    ])
+    st.dataframe(df_match.set_index("球員"))
