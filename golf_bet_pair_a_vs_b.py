@@ -25,15 +25,23 @@ if not set(["course_name","area","hole","hcp","par"]).issubset(courses.columns):
 if page == "成績管理":
     st.title("🏌️ 鴻勁高球隊成績管理")
 
+    # === 初始化 session_state，避免切換回來 reset ===
+    if "scores" not in st.session_state:
+        st.session_state["scores"] = {}
+    if "selected_players" not in st.session_state:
+        st.session_state["selected_players"] = []
+    if "course_selected" not in st.session_state:
+        st.session_state["course_selected"] = None
+
     # Step 1: 選擇球場
     course_names = courses["course_name"].unique()
-    selected_course = st.selectbox("🏌️‍♂️ 選擇球場", course_names)
+    selected_course = st.selectbox("🏌️‍♂️ 選擇球場", course_names, key="selected_course")
     course_filtered = courses[courses["course_name"] == selected_course]
 
     all_areas = course_filtered["area"].unique()
-    selected_front = st.selectbox("前九洞區域", all_areas)
+    selected_front = st.selectbox("前九洞區域", all_areas, key="front_area")
     back_options = [a for a in all_areas if a != selected_front]
-    selected_back = st.selectbox("後九洞區域", back_options)
+    selected_back = st.selectbox("後九洞區域", back_options, key="back_area")
 
     course_selected = pd.concat([
         course_filtered[course_filtered["area"] == selected_front].sort_values("hole"),
@@ -44,33 +52,43 @@ if page == "成績管理":
 
     # Step 2: 設定人數
     st.header("1. 設定比賽人數")
-    num_players = st.number_input("請輸入參賽人數 (1~24)", min_value=1, max_value=24, value=4, step=1, key="num_players")
+    num_players = st.number_input(
+        "請輸入參賽人數 (1~24)", 
+        min_value=1, max_value=24, value=4, step=1, key="num_players"
+    )
 
     # Step 3: 選擇球員 & 輸入成績
     st.header("2. 輸入比賽成績 (連續輸入18位數字)")
-    scores = {}
     selected_players = []
 
     for i in range(num_players):
         st.subheader(f"球員 {i+1}")
         cols = st.columns([1, 2])
+
+        # 球員選擇
         with cols[0]:
-            player_name = st.selectbox(f"選擇球員 {i+1}", players["name"].values, key=f"player_{i}")
+            player_name = st.selectbox(
+                f"選擇球員 {i+1}",
+                players["name"].values,
+                key=f"player_{i}"
+            )
             selected_players.append(player_name)
+
+        # 成績輸入
         with cols[1]:
-            score_str = st.text_input(f"{player_name} 的成績 (18位數字)", key=f"scores_{i}", max_chars=18)
+            score_str = st.text_input(
+                f"{player_name} 的成績 (18位數字)",
+                key=f"scores_{i}",
+                max_chars=18
+            )
 
-        if score_str:
-            if score_str.isdigit() and len(score_str) == 18:
-                scores[player_name] = [int(x) for x in score_str]
-            else:
-                st.error(f"⚠️ {player_name} 成績必須是剛好 18 位數字")
-                scores[player_name] = []
+        # 驗證並保存到 session_state
+        if score_str and score_str.isdigit() and len(score_str) == 18:
+            st.session_state["scores"][player_name] = [int(x) for x in score_str]
         else:
-            scores[player_name] = []
+            st.session_state["scores"][player_name] = []
 
-    # 存到 session_state，供比分對戰使用
-    st.session_state["scores"] = scores
+    # 更新到 session_state
     st.session_state["selected_players"] = selected_players
     st.session_state["course_selected"] = course_selected
 
