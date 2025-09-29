@@ -19,19 +19,16 @@ if not set(["course_name","area","hole","hcp","par"]).issubset(courses.columns):
     st.stop()
 
 # --- Sidebar 分頁 ---
-page = st.sidebar.radio("📑 選擇頁面", 
-                        ["比賽設定", "成績輸入", "比賽結果與獎項", "匯出報表"], 
-                        key="main_page")
+page = st.sidebar.radio("📑 選擇頁面", ["比賽設定", "成績輸入 & 獎項", "比賽結果與獎項", "匯出報表"])
 
-# === 初始化 session_state ===
+# session_state 儲存
 if "scores" not in st.session_state: st.session_state.scores = {}
 if "course_selected" not in st.session_state: st.session_state.course_selected = None
 if "selected_players" not in st.session_state: st.session_state.selected_players = []
 if "winners" not in st.session_state: st.session_state.winners = None
 if "awards" not in st.session_state: st.session_state.awards = {}
+if "num_n_near" not in st.session_state: st.session_state.num_n_near = 0
 if "num_players" not in st.session_state: st.session_state.num_players = 4
-if "match_summary" not in st.session_state: st.session_state.match_summary = None
-if "match_df" not in st.session_state: st.session_state.match_df = None
 
 # === 共用計算函式 ===
 def calculate_gross(scores):
@@ -103,7 +100,7 @@ def get_winners(scores, course_selected):
 
 # ------------------ 分頁內容 ------------------
 
-# === 比賽設定 ===
+# === Page1 比賽設定 ===
 if page == "比賽設定":
     st.header("⚙️ 比賽設定")
 
@@ -126,9 +123,12 @@ if page == "比賽設定":
 
     st.session_state.num_players = st.number_input("請輸入參賽人數 (1~24)", 1, 24, 4)
 
-# === 成績輸入 ===
-elif page == "成績輸入":
-    st.header("✍️ 輸入比賽成績")
+    # N近洞獎數量設定
+    st.session_state.num_n_near = st.number_input("請設定 N近洞獎 數量", 0, 18, 0)
+
+# === Page2 成績輸入 & 獎項 ===
+elif page == "成績輸入 & 獎項":
+    st.header("✍️ 輸入比賽成績 & 特殊獎項")
     scores = {}
     selected_players = []
 
@@ -149,7 +149,28 @@ elif page == "成績輸入":
     st.session_state.scores = scores
     st.session_state.selected_players = selected_players
 
-# === 比賽結果與獎項 ===
+    # === 特殊獎項輸入 ===
+    st.subheader("🎯 特殊獎項輸入")
+    long_drive = st.multiselect("🏌️‍♂️ 遠距獎 (最多 2 人)", players["name"].values, max_selections=2)
+    near1 = st.multiselect("🎯 一近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
+    near2 = st.multiselect("🎯 二近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
+    near3 = st.multiselect("🎯 三近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
+
+    n_near_awards = []
+    for i in range(st.session_state.num_n_near):
+        player = st.selectbox(f"N近洞獎 第{i+1}名", ["無"]+list(players["name"].values), key=f"n_near_{i}")
+        if player != "無": n_near_awards.append(player)
+
+    awards = {
+        "遠距獎": long_drive,
+        "一近洞獎": near1,
+        "二近洞獎": near2,
+        "三近洞獎": near3,
+        "N近洞獎": n_near_awards
+    }
+    st.session_state.awards = awards
+
+# === Page3 比賽結果與獎項 ===
 elif page == "比賽結果與獎項":
     st.header("🏆 比賽結果")
 
@@ -165,7 +186,6 @@ elif page == "比賽結果與獎項":
         col3.write(f"🏅 淨桿冠軍: {winners['net_champion']}")
         col4.write(f"🥈 淨桿亞軍: {winners['net_runnerup']}")
 
-        # Birdie 紀錄
         if winners["birdies"]:
             st.write("✨ Birdie 紀錄：")
             birdie_dict = {}
@@ -177,55 +197,10 @@ elif page == "比賽結果與獎項":
         else:
             st.write("無 Birdie 紀錄")
 
-        # ------------------ Match Play ------------------
-        st.subheader("⚔️ Match Play 賭金結算 (單位 50)")
-        bet_unit = 50
-        scores = st.session_state.scores
-        course_selected = st.session_state.course_selected
-        match_results = []
-        total_earnings = {p: 0 for p in scores.keys()}
-
-        for i in range(18):
-            hole_scores = {p: scores[p][i] for p in scores if scores[p]}
-            min_score = min(hole_scores.values())
-            winners_hole = [p for p,s in hole_scores.items() if s == min_score]
-
-            if len(winners_hole) == 1:
-                winner = winners_hole[0]
-                for p in scores.keys():
-                    if p == winner:
-                        total_earnings[p] += bet_unit
-                    else:
-                        total_earnings[p] -= bet_unit
-                match_results.append({"洞": i+1, "勝者": winner, "賭金單位": bet_unit})
-            else:
-                match_results.append({"洞": i+1, "勝者": "平手", "賭金單位": 0})
-
-        match_df = pd.DataFrame(match_results)
-        st.dataframe(match_df)
-        summary_df = pd.DataFrame([{"球員": p, "總結算": total_earnings[p]} for p in total_earnings])
-        st.subheader("💰 Match Play 總結")
-        st.dataframe(summary_df.set_index("球員"))
-
-        st.session_state.match_summary = summary_df
-        st.session_state.match_df = match_df
-
-        # ------------------ 獎項 ------------------
-        st.subheader("🎯 獎項選擇")
-        long_drive = st.multiselect("🏌️‍♂️ 遠距獎", players["name"].values, max_selections=2)
-        near1 = st.multiselect("🎯 一近洞獎", players["name"].values, max_selections=2)
-        num_n_near = st.number_input("N近洞獎數量", 0, 18, 0)
-        n_near_awards = []
-        for i in range(num_n_near):
-            player = st.selectbox(f"N近洞獎 第{i+1}名", ["無"]+list(players["name"].values), key=f"n_near_{i}")
-            if player != "無": n_near_awards.append(player)
-
-        awards = {"遠距獎": long_drive, "一近洞獎": near1, "N近洞獎": n_near_awards}
-        st.session_state.awards = awards
-
+        # 顯示獎項結果
         st.subheader("🏅 特殊獎項結果")
         award_texts = []
-        for k, v in awards.items():
+        for k, v in st.session_state.awards.items():
             if k=="N近洞獎":
                 counts = Counter(v)
                 formatted = " ".join([f"{name}*{cnt}" for name, cnt in counts.items()])
@@ -234,7 +209,7 @@ elif page == "比賽結果與獎項":
                 award_texts.append(f"**{k}** {', '.join(v) if v else '無'}")
         st.markdown(" ｜ ".join(award_texts))
 
-# === 匯出報表 ===
+# === Page4 匯出報表 ===
 elif page == "匯出報表":
     st.header("💾 匯出比賽結果")
     if st.session_state.winners:
@@ -252,15 +227,16 @@ elif page == "匯出報表":
             "差點更新": [winners["hcp_new"][p] for p in winners["gross"].keys()]
         })
 
+        csv_buffer = io.StringIO()
+        df_leader.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+        st.download_button("📥 下載 CSV", data=csv_buffer.getvalue(),
+                           file_name="leaderboard.csv", mime="text/csv")
+
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
             df_leader.to_excel(writer, sheet_name="Leaderboard", index=False)
             awards_df = pd.DataFrame([{"獎項": k, "得獎名單": ", ".join(v) if v else "無"} for k,v in awards.items()])
             awards_df.to_excel(writer, sheet_name="Awards", index=False)
-            if st.session_state.match_summary is not None:
-                st.session_state.match_summary.to_excel(writer, sheet_name="Match_Summary", index=False)
-            if st.session_state.match_df is not None:
-                st.session_state.match_df.to_excel(writer, sheet_name="Match_Detail", index=False)
         st.download_button("📥 下載 Excel", data=excel_buffer.getvalue(),
                            file_name="leaderboard.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
