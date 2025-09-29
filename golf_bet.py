@@ -8,7 +8,7 @@ st.set_page_config(page_title="鴻勁高球隊成績管理", layout="wide")
 st.title("🏌️ 鴻勁高球隊成績管理")
 
 # === 載入 CSV ===
-players = pd.read_csv("players_db.csv", encoding="utf-8-sig")
+players = pd.read_csv("players.csv", encoding="utf-8-sig")
 courses = pd.read_csv("course_db.csv", encoding="utf-8-sig")
 
 # 驗證欄位
