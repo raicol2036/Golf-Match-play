@@ -23,13 +23,15 @@ page = st.sidebar.radio("📑 選擇頁面",
                         ["比賽設定", "成績輸入", "比賽結果與獎項", "匯出報表"], 
                         key="main_page")
 
-# session_state 儲存
+# === 初始化 session_state ===
 if "scores" not in st.session_state: st.session_state.scores = {}
 if "course_selected" not in st.session_state: st.session_state.course_selected = None
 if "selected_players" not in st.session_state: st.session_state.selected_players = []
 if "winners" not in st.session_state: st.session_state.winners = None
 if "awards" not in st.session_state: st.session_state.awards = {}
 if "num_players" not in st.session_state: st.session_state.num_players = 4
+if "match_summary" not in st.session_state: st.session_state.match_summary = None
+if "match_df" not in st.session_state: st.session_state.match_df = None
 
 # === 共用計算函式 ===
 def calculate_gross(scores):
@@ -163,6 +165,7 @@ elif page == "比賽結果與獎項":
         col3.write(f"🏅 淨桿冠軍: {winners['net_champion']}")
         col4.write(f"🥈 淨桿亞軍: {winners['net_runnerup']}")
 
+        # Birdie 紀錄
         if winners["birdies"]:
             st.write("✨ Birdie 紀錄：")
             birdie_dict = {}
@@ -174,7 +177,40 @@ elif page == "比賽結果與獎項":
         else:
             st.write("無 Birdie 紀錄")
 
-        # 獎項選擇
+        # ------------------ Match Play ------------------
+        st.subheader("⚔️ Match Play 賭金結算 (單位 50)")
+        bet_unit = 50
+        scores = st.session_state.scores
+        course_selected = st.session_state.course_selected
+        match_results = []
+        total_earnings = {p: 0 for p in scores.keys()}
+
+        for i in range(18):
+            hole_scores = {p: scores[p][i] for p in scores if scores[p]}
+            min_score = min(hole_scores.values())
+            winners_hole = [p for p,s in hole_scores.items() if s == min_score]
+
+            if len(winners_hole) == 1:
+                winner = winners_hole[0]
+                for p in scores.keys():
+                    if p == winner:
+                        total_earnings[p] += bet_unit
+                    else:
+                        total_earnings[p] -= bet_unit
+                match_results.append({"洞": i+1, "勝者": winner, "賭金單位": bet_unit})
+            else:
+                match_results.append({"洞": i+1, "勝者": "平手", "賭金單位": 0})
+
+        match_df = pd.DataFrame(match_results)
+        st.dataframe(match_df)
+        summary_df = pd.DataFrame([{"球員": p, "總結算": total_earnings[p]} for p in total_earnings])
+        st.subheader("💰 Match Play 總結")
+        st.dataframe(summary_df.set_index("球員"))
+
+        st.session_state.match_summary = summary_df
+        st.session_state.match_df = match_df
+
+        # ------------------ 獎項 ------------------
         st.subheader("🎯 獎項選擇")
         long_drive = st.multiselect("🏌️‍♂️ 遠距獎", players["name"].values, max_selections=2)
         near1 = st.multiselect("🎯 一近洞獎", players["name"].values, max_selections=2)
@@ -187,7 +223,6 @@ elif page == "比賽結果與獎項":
         awards = {"遠距獎": long_drive, "一近洞獎": near1, "N近洞獎": n_near_awards}
         st.session_state.awards = awards
 
-        # 顯示獎項結果
         st.subheader("🏅 特殊獎項結果")
         award_texts = []
         for k, v in awards.items():
@@ -217,16 +252,15 @@ elif page == "匯出報表":
             "差點更新": [winners["hcp_new"][p] for p in winners["gross"].keys()]
         })
 
-        csv_buffer = io.StringIO()
-        df_leader.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
-        st.download_button("📥 下載 CSV", data=csv_buffer.getvalue(),
-                           file_name="leaderboard.csv", mime="text/csv")
-
         excel_buffer = io.BytesIO()
         with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
             df_leader.to_excel(writer, sheet_name="Leaderboard", index=False)
             awards_df = pd.DataFrame([{"獎項": k, "得獎名單": ", ".join(v) if v else "無"} for k,v in awards.items()])
             awards_df.to_excel(writer, sheet_name="Awards", index=False)
+            if st.session_state.match_summary is not None:
+                st.session_state.match_summary.to_excel(writer, sheet_name="Match_Summary", index=False)
+            if st.session_state.match_df is not None:
+                st.session_state.match_df.to_excel(writer, sheet_name="Match_Detail", index=False)
         st.download_button("📥 下載 Excel", data=excel_buffer.getvalue(),
                            file_name="leaderboard.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
