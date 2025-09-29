@@ -150,25 +150,32 @@ elif page == "成績輸入 & 獎項":
     st.session_state.selected_players = selected_players
 
     # === 特殊獎項輸入 ===
-    st.subheader("🎯 特殊獎項輸入")
-    long_drive = st.multiselect("🏌️‍♂️ 遠距獎 (最多 2 人)", players["name"].values, max_selections=2)
-    near1 = st.multiselect("🎯 一近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
-    near2 = st.multiselect("🎯 二近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
-    near3 = st.multiselect("🎯 三近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
+    # === 特殊獎項輸入 ===
+st.subheader("🎯 特殊獎項輸入")
+long_drive = st.multiselect("🏌️‍♂️ 遠距獎 (最多 2 人)", players["name"].values, max_selections=2)
+near1 = st.multiselect("🎯 一近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
+near2 = st.multiselect("🎯 二近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
+near3 = st.multiselect("🎯 三近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
 
-    n_near_awards = []
-    for i in range(st.session_state.num_n_near):
-        player = st.selectbox(f"N近洞獎 第{i+1}名", ["無"]+list(players["name"].values), key=f"n_near_{i}")
-        if player != "無": n_near_awards.append(player)
+# N近洞獎：允許重複輸入，每一名額一個下拉
+n_near_awards = []
+for i in range(st.session_state.num_n_near):
+    player = st.selectbox(
+        f"🎯 N近洞獎 第 {i+1} 名",
+        ["無"] + list(players["name"].values),
+        key=f"n_near_{i}"
+    )
+    if player != "無":
+        n_near_awards.append(player)
 
-    awards = {
-        "遠距獎": long_drive,
-        "一近洞獎": near1,
-        "二近洞獎": near2,
-        "三近洞獎": near3,
-        "N近洞獎": n_near_awards
-    }
-    st.session_state.awards = awards
+awards = {
+    "遠距獎": long_drive,
+    "一近洞獎": near1,
+    "二近洞獎": near2,
+    "三近洞獎": near3,
+    "N近洞獎": n_near_awards
+}
+st.session_state.awards = awards
 
 # === Page3 比賽結果與獎項 ===
 elif page == "比賽結果與獎項":
@@ -201,12 +208,14 @@ elif page == "比賽結果與獎項":
         st.subheader("🏅 特殊獎項結果")
         award_texts = []
         for k, v in st.session_state.awards.items():
-            if k=="N近洞獎":
-                counts = Counter(v)
-                formatted = " ".join([f"{name}*{cnt}" for name, cnt in counts.items()])
-                award_texts.append(f"**{k}** {formatted if formatted else '無'}")
+            if k == "N近洞獎":
+                 from collections import Counter
+                 counts = Counter(v)  # 計算重複次數
+                 formatted = " ".join([f"{name}*{cnt}" for name, cnt in counts.items()])
+                 award_texts.append(f"**{k} (共 {st.session_state.num_n_near} 名)** {formatted if formatted else '無'}")
             else:
-                award_texts.append(f"**{k}** {', '.join(v) if v else '無'}")
+                 award_texts.append(f"**{k}** {', '.join(v) if v else '無'}")
+
         st.markdown(" ｜ ".join(award_texts))
 
 # === Page4 匯出報表 ===
