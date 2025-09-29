@@ -21,7 +21,7 @@ if not set(["course_name","area","hole","hcp","par"]).issubset(courses.columns):
 # --- Sidebar 分頁 ---
 page = st.sidebar.radio("📑 選擇頁面", ["比賽設定", "成績輸入 & 獎項", "比賽結果與獎項", "匯出報表"])
 
-# --- session_state 儲存 ---
+# --- session_state 預設 ---
 if "scores" not in st.session_state: st.session_state.scores = {}
 if "course_selected" not in st.session_state: st.session_state.course_selected = None
 if "selected_players" not in st.session_state: st.session_state.selected_players = []
@@ -122,6 +122,8 @@ if page == "比賽設定":
     st.success(f"✅ 已選擇：{selected_course} / 前九: {selected_front} / 後九: {selected_back}")
 
     st.session_state.num_players = st.number_input("請輸入參賽人數 (1~24)", 1, 24, 4)
+
+    # N近洞獎數量設定
     st.session_state.num_n_near = st.number_input("請設定 N近洞獎 數量", 0, 18, 0)
 
 # === Page2 成績輸入 & 獎項 ===
@@ -149,16 +151,32 @@ elif page == "成績輸入 & 獎項":
 
     # === 特殊獎項輸入 ===
     st.subheader("🎯 特殊獎項輸入")
-    long_drive = st.multiselect("🏌️‍♂️ 遠距獎 (最多 2 人)", players["name"].values, max_selections=2)
-    near1 = st.multiselect("🎯 一近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
-    near2 = st.multiselect("🎯 二近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
-    near3 = st.multiselect("🎯 三近洞獎 (最多 2 人)", players["name"].values, max_selections=2)
 
-    # N近洞獎：允許重複輸入，每一名額一個下拉
+    def award_select(title, key_prefix, slots=2):
+        cols = st.columns(slots)
+        awardees = []
+        for i in range(slots):
+            with cols[i]:
+                player = st.selectbox(
+                    f"{title} - 第{i+1}人",
+                    ["無"] + list(players["name"].values),
+                    key=f"{key_prefix}_{i}"
+                )
+                if player != "無":
+                    awardees.append(player)
+        return awardees
+
+    # 固定獎項（每個 2 人）
+    long_drive = award_select("🏌️‍♂️ 遠距獎", "long_drive", slots=2)
+    near1 = award_select("🎯 一近洞獎", "near1", slots=2)
+    near2 = award_select("🎯 二近洞獎", "near2", slots=2)
+    near3 = award_select("🎯 三近洞獎", "near3", slots=2)
+
+    # N近洞獎（由 Page1 設定數量，允許重複）
     n_near_awards = []
     for i in range(st.session_state.num_n_near):
         player = st.selectbox(
-            f"🎯 N近洞獎 第 {i+1} 名",
+            f"🎯 N近洞獎 - 第{i+1}人",
             ["無"] + list(players["name"].values),
             key=f"n_near_{i}"
         )
@@ -206,11 +224,11 @@ elif page == "比賽結果與獎項":
         award_texts = []
         for k, v in st.session_state.awards.items():
             if k == "N近洞獎":
-                counts = Counter(v)  # 計算重複次數
-                formatted = " ".join([f"{name}*{cnt}" for name, cnt in counts.items()])
-                award_texts.append(f"**{k} (共 {st.session_state.num_n_near} 名)** {formatted if formatted else '無'}")
+                 counts = Counter(v)
+                 formatted = " ".join([f"{name}*{cnt}" for name, cnt in counts.items()])
+                 award_texts.append(f"**{k} (共 {st.session_state.num_n_near} 人)** {formatted if formatted else '無'}")
             else:
-                award_texts.append(f"**{k}** {', '.join(v) if v else '無'}")
+                 award_texts.append(f"**{k}** {', '.join(v) if v else '無'}")
 
         st.markdown(" ｜ ".join(award_texts))
 
